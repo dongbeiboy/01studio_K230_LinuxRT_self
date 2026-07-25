@@ -95,7 +95,8 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+            src/little/buildroot-ext/buildroot-*
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -176,7 +177,8 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+            src/little/buildroot-ext/buildroot-*
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -280,7 +282,8 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+            src/little/buildroot-ext/buildroot-*
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -397,7 +400,8 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+            src/little/buildroot-ext/buildroot-*
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
 
       - name: Prepare output structure
         run: |
