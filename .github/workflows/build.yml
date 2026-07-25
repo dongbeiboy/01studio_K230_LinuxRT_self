@@ -17,7 +17,7 @@ jobs:
   # ============================================================
   check:
     name: Check
-    if: github.ref_type == 'branch'
+    if: github.event_name == 'pull_request' || github.ref_type == 'branch'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile') }}-v2
+          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Restore source cache
         id: cache-src
@@ -95,7 +95,7 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile') }}-v2
+          key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Prepare toolchain & sources
         if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
@@ -161,7 +161,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile') }}-v2
+          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Restore source cache
         id: cache-src
@@ -176,7 +176,7 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile') }}-v2
+          key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Prepare toolchain & sources
         if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
@@ -266,7 +266,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile') }}-v2
+          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Restore source cache
         id: cache-src
@@ -281,7 +281,7 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile') }}-v2
+          key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Prepare toolchain & sources
         if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
@@ -318,6 +318,10 @@ jobs:
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           patch_m4
+          # 校验 m4 补丁
+          [ -f "$OUT/host-m4-1.4.18/lib/c-stack.c" ] && \
+            grep -q '#elif 0' "$OUT/host-m4-1.4.18/lib/c-stack.c" || \
+            { echo "❌ m4 补丁失败（版本可能变了）"; exit 1; }
           # 删除 cpio.mk 中的 mknod（GitHub runner 无 CAP_MKNOD）
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           if [ -f "$CPIO_MK" ]; then
@@ -329,6 +333,9 @@ jobs:
           rm -f "$OUT/host-m4-1.4.18/.stamp_built"   # 删 stamp 确保重编
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           if patch_fakeroot; then
+            # 校验 fakeroot 补丁
+            grep -q '#define _STAT_VER 1' "$OUT/host-fakeroot-1.25.3/libfakeroot.c" || \
+              { echo "❌ fakeroot _STAT_VER 补丁失败"; exit 1; }
             del_s "$OUT/host-fakeroot-1.25.3" \
               .stamp_configured .stamp_built .stamp_installed
           else
@@ -339,6 +346,8 @@ jobs:
               make -C "$BRW" CONF=${{ matrix.conf }} host-fakeroot-extract 2>/dev/null || \
               make CONF=${{ matrix.conf }} buildroot 2>&1 || true  # fallback: 完整跑直到 fakeroot 解压
             patch_fakeroot
+            grep -q '#define _STAT_VER 1' "$OUT/host-fakeroot-1.25.3/libfakeroot.c" 2>/dev/null || \
+              { echo "❌ fakeroot 补丁失败（手动提取后）"; exit 1; }
             del_s "$OUT/host-fakeroot-1.25.3" \
               .stamp_configured .stamp_built .stamp_installed
           fi
@@ -346,7 +355,8 @@ jobs:
           echo "═══ Round 3: buildroot-rebuild ═══"
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
             { echo "⚠️ rebuild failed → fallback full buildroot"; \
-              make CONF=${{ matrix.conf }} buildroot 2>&1 || true; }
+              make CONF=${{ matrix.conf }} buildroot 2>&1 || \
+              { echo "❌ buildroot 完全失败"; exit 1; }; }
           # ── Fix cpio mknod（GitHub Runner 无 CAP_MKNOD） ──
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
@@ -413,7 +423,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile') }}-v2
+          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
       - name: Link toolchain to /opt/toolchain
         run: |
@@ -473,6 +483,8 @@ jobs:
     if: github.ref_type == 'tag'
     needs: merge
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
