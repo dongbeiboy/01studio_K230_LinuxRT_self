@@ -46,7 +46,7 @@ jobs:
 
   # ── 大核：RTT / MPP / Big-core OpenSBI ──
   build-big:
-    name: "Big ${{ matrix.conf }}"
+    name: "大核 (RTT+MPP)  ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     timeout-minutes: 180
@@ -71,16 +71,9 @@ jobs:
             gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
             autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
             libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
-            python3 python3-pip python-is-python3 scons wget curl ccache
+            python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
-      - name: Restore ccache
-        id: cache-ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-big-${{ github.run_number }}-v1
-          restore-keys: ccache-big-
 
       - name: Restore toolchain cache
         id: cache-tc
@@ -115,19 +108,11 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
-      - name: Configure ccache
-        run: |
-          ccache -M 1G -F 0 -z
-          sudo mkdir -p /usr/lib/ccache
-          for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
-            [ -f "$cc" ] && sudo ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
-          done
-          echo "ccache symlinks:" && ls /usr/lib/ccache/
 
       - name: Build big core (RTT + MPP + OpenSBI)
         run: make CONF=${{ matrix.conf }} rt-smart
         env:
-          PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
 
       - name: Upload big core outputs
@@ -142,7 +127,7 @@ jobs:
 
   # ── 小核：Linux + U-Boot + little-core OpenSBI ──
   build-little:
-    name: "Little ${{ matrix.conf }}"
+    name: "小核 (Linux+U-Boot)  ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     timeout-minutes: 90
@@ -167,16 +152,9 @@ jobs:
             gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
             autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
             libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
-            python3 python3-pip python-is-python3 scons wget curl ccache
+            python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
-      - name: Restore ccache
-        id: cache-ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-little-${{ github.run_number }}-v1
-          restore-keys: ccache-little-
 
       - name: Restore toolchain cache
         id: cache-tc
@@ -211,20 +189,37 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
-      - name: Configure ccache
-        run: |
-          ccache -M 1G -F 0 -z
-          sudo mkdir -p /usr/lib/ccache
-          for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
-            [ -f "$cc" ] && sudo ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
-          done
-          echo "ccache symlinks:" && ls /usr/lib/ccache/
+      - name: Restore Linux hot cache (drivers)
+        uses: actions/cache/restore@v4
+        with:
+          path: output/${{ matrix.conf }}/little/linux/drivers
+          key: linux-hot-${{ matrix.conf }}-${{ github.run_number }}
+          restore-keys: linux-hot-${{ matrix.conf }}-
+
+      - name: Restore Linux cold cache (rest)
+        uses: actions/cache/restore@v4
+        with:
+          path: output/${{ matrix.conf }}/little/linux
+          key: linux-cold-${{ matrix.conf }}-${{ github.run_number }}
+          restore-keys: linux-cold-${{ matrix.conf }}-
 
       - name: Build Linux + U-Boot + little-core OpenSBI
         run: make CONF=${{ matrix.conf }} linux uboot little-core-opensbi
         env:
-          PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
+
+      - name: Save Linux hot cache (drivers)
+        uses: actions/cache/save@v4
+        with:
+          path: output/${{ matrix.conf }}/little/linux/drivers
+          key: linux-hot-${{ matrix.conf }}-${{ github.run_number }}
+
+      - name: Save Linux cold cache (rest)
+        uses: actions/cache/save@v4
+        with:
+          path: output/${{ matrix.conf }}/little/linux
+          key: linux-cold-${{ matrix.conf }}-${{ github.run_number }}
 
       - name: Upload linux/uboot/opensbi outputs
         uses: actions/upload-artifact@v4
@@ -237,7 +232,7 @@ jobs:
 
   # ── rootfs：Buildroot（独立并行） ──
   build-rootfs:
-    name: "RootFS ${{ matrix.conf }}"
+    name: "RootFS (Buildroot)  ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     timeout-minutes: 90
@@ -262,16 +257,9 @@ jobs:
             gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
             autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
             libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
-            python3 python3-pip python-is-python3 scons wget curl ccache
+            python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
-      - name: Restore ccache
-        id: cache-ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-rootfs-${{ github.run_number }}-v1
-          restore-keys: ccache-rootfs-
 
       - name: Restore toolchain cache
         id: cache-tc
@@ -306,14 +294,6 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
-      - name: Configure ccache
-        run: |
-          ccache -M 1G -F 0 -z
-          sudo mkdir -p /usr/lib/ccache
-          for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
-            [ -f "$cc" ] && sudo ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
-          done
-          echo "ccache symlinks:" && ls /usr/lib/ccache/
 
       - name: Build buildroot (with host-m4 + host-fakeroot glibc 2.35 patches)
         run: |
@@ -378,7 +358,7 @@ jobs:
           ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
             { echo "❌ images/ missing"; exit 1; }
         env:
-          PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
 
       - name: Upload buildroot outputs
@@ -391,7 +371,7 @@ jobs:
 
   # ── 合并 ──
   merge:
-    name: "Merge ${{ matrix.conf }}"
+    name: "打包镜像  ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
     needs: [build-big, build-little, build-rootfs]
     runs-on: ubuntu-22.04
