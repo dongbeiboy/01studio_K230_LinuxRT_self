@@ -119,6 +119,7 @@ jobs:
           name: ${{ matrix.conf }}-big
           path: |
             output/${{ matrix.conf }}/big/
+            output/${{ matrix.conf }}/common/
             src/big/rt-smart/userapps/root/
           retention-days: 1
 
