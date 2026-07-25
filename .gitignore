@@ -19,3 +19,77 @@ board/common/post_copy_rootfs/app/
 board/common/post_copy_rootfs/etc/version/
 board/common/post_copy_rootfs/lib/
 tools/tuning-tool-client/
+
+# === Build artifacts & downloads ===
+dl/
+src/.src_fetched
+src/big/kmodel/
+src/big/nncase/
+src/big/utils/
+
+# Build output directories
+src/big/mpp/userapps/sample/build_lvgl/
+src/big/mpp/userapps/sample/elf/
+src/big/mpp/userapps/sample/fastboot_app/build_fastboot/
+src/big/mpp/userapps/sample/fastboot_elf/
+src/big/mpp/userapps/sample/sample_triple_camera_facedetect/build_triple/
+src/big/rt-smart/userapps/root/
+src/common/cdk/kernel/ipcm/out/
+src/common/cdk/user/out/
+src/common/cdk/user/mapi/mediaclient/lib/
+src/common/cdk/user/mapi/mediaserver/lib/
+src/common/cdk/user/middleware/audio_mix/lib/
+src/common/cdk/user/middleware/kplayer/lib/
+src/common/cdk/user/middleware/mp4_format/build/
+src/common/cdk/user/middleware/mp4_format/lib/
+src/common/cdk/user/middleware/rtsp_client/lib/
+src/common/cdk/user/middleware/rtsp_server/lib/
+src/common/cdk/user/middleware/ws_discovery/lib/
+
+# Buildroot
+src/little/buildroot-ext/buildroot-*/
+src/little/buildroot-ext/dl/
+
+# Object files & binaries
+src/**/*.o
+src/**/*.bin
+
+# Backup files
+*.bak
+*.orig
+
+# Misc
+src/big/mpp/kernel/lib/*.a
+src/big/mpp/userapps/lib/*.a
+src/big/mpp/userapps/src/sensor/k230dwmapgen
+src/big/rt-smart/kernel/bsp/maix3/applications/romfs.c
+src/big/rt-smart/kernel/bsp/maix3/cconfig.h
+
+# live555 build artifacts
+src/common/cdk/user/thirdparty/live/*/lib*.a
+src/common/cdk/user/thirdparty/live/hlsProxy/live555HLSProxy
+src/common/cdk/user/thirdparty/live/mediaServer/live555MediaServer
+src/common/cdk/user/thirdparty/live/proxyServer/live555ProxyServer
+src/common/cdk/user/thirdparty/live/testProgs/
+
+# IPCM build artifacts
+src/common/cdk/kernel/ipcm/config.log
+src/common/cdk/kernel/ipcm/config.mk
+src/common/cdk/kernel/ipcm/include/device_config.h
+src/common/cdk/kernel/ipcm/class/
+
+# Linux kernel script build artifacts
+src/little/linux/scripts/basic/fixdep
+src/little/linux/scripts/basic/.fixdep.cmd
+src/little/linux/scripts/kconfig/conf
+src/little/linux/scripts/kconfig/*.cmd
+src/little/linux/scripts/kconfig/lexer.lex.c
+src/little/linux/scripts/kconfig/parser.tab.*
+src/little/linux/scripts/kconfig/zconf.*
+
+# RT-Smart build artifacts
+src/big/rt-smart/kernel/bsp/maix3/rtthread.elf
+src/big/rt-smart/kernel/bsp/maix3/rtthread.map
+
+# Misc backup/alternate configs
+*.nofat
