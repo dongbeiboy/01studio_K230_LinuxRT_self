@@ -427,13 +427,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.conf }}-little
-          path: output/${{ matrix.conf }}/
+          path: .
 
       - name: Download rootfs artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.conf }}-rootfs
-          path: output/${{ matrix.conf }}/little/buildroot-ext/
+          path: .
 
       - name: Build image
         run: |
