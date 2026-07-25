@@ -118,9 +118,9 @@ jobs:
       - name: Configure ccache
         run: |
           ccache -M 1G -F 0 -z
-          mkdir -p /usr/lib/ccache
+          sudo mkdir -p /usr/lib/ccache
           for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
-            [ -f "$cc" ] && ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
+            [ -f "$cc" ] && sudo ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
           done
           echo "ccache symlinks:" && ls /usr/lib/ccache/
 
@@ -214,9 +214,9 @@ jobs:
       - name: Configure ccache
         run: |
           ccache -M 1G -F 0 -z
-          mkdir -p /usr/lib/ccache
+          sudo mkdir -p /usr/lib/ccache
           for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
-            [ -f "$cc" ] && ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
+            [ -f "$cc" ] && sudo ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
           done
           echo "ccache symlinks:" && ls /usr/lib/ccache/
 
@@ -309,9 +309,9 @@ jobs:
       - name: Configure ccache
         run: |
           ccache -M 1G -F 0 -z
-          mkdir -p /usr/lib/ccache
+          sudo mkdir -p /usr/lib/ccache
           for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
-            [ -f "$cc" ] && ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
+            [ -f "$cc" ] && sudo ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
           done
           echo "ccache symlinks:" && ls /usr/lib/ccache/
 
