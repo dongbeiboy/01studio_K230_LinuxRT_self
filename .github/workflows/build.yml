@@ -442,6 +442,11 @@ jobs:
           echo "CONF=${{ matrix.conf }}" > .last_conf
           export K230_SDK_ROOT="$(pwd)"
           export BUILD_DIR="$(pwd)/output/${{ matrix.conf }}"
+          export RTT_SDK_BUILD_DIR="${BUILD_DIR}/big/rt-smart"
+          export BIG_OPENSBI_BUILD_DIR="${BUILD_DIR}/common/big-opensbi"
+          export LITTLE_OPENSBI_BUILD_DIR="${BUILD_DIR}/common/little-opensbi"
+          export LINUX_BUILD_DIR="${BUILD_DIR}/little/linux"
+          export BUILDROOT_BUILD_DIR="${BUILD_DIR}/little/buildroot-ext"
           bash board/common/gen_image_script/gen_image.sh
 
       - name: Package release
