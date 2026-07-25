@@ -360,7 +360,7 @@ jobs:
           echo "═══ Round 3: buildroot-rebuild ═══"
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
             { echo "⚠️ rebuild failed → fallback full buildroot"; \
-              make CONF=${{ matrix.conf }} buildroot 2>&1 || true; }
+              make CONF=${{ matrix.conf }} buildroot; }
           # ── Fix cpio mknod（GitHub Runner 无 CAP_MKNOD） ──
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
@@ -371,8 +371,12 @@ jobs:
             PATH="$HB:$HB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO"
             echo "✅ cpio done → finalize"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
-              make CONF=${{ matrix.conf }} buildroot 2>&1 || true
+              make CONF=${{ matrix.conf }} buildroot
           fi
+          # ── Verify ──
+          echo "=== buildroot images ==="
+          ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
+            { echo "❌ images/ missing"; exit 1; }
         env:
           PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
