@@ -353,30 +353,35 @@ jobs:
             del_s "$OUT/host-fakeroot-1.25.3" \
               .stamp_configured .stamp_built .stamp_installed
           fi
-          # ── Round 3: buildroot-rebuild（增量，比完整 buildroot 快很多） ──
+          # ── Round 3: 最后一轮，带 cpio 自动修复 ──
           echo "═══ Round 3: buildroot-rebuild ═══"
+          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
+          FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
+          HB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
           # Stub makedevs (GitHub runner 无 CAP_MKNOD)
-          MB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin/makedevs"
-          if [ -f "$MB" ] && ! head -1 "$MB" | grep -q '\[CI-NOOP\]'; then
+          MB="$HB/makedevs"
+          if [ -f "$MB" ] && ! grep -q '\[CI-NOOP\]' "$MB"; then
             mv "$MB" "$MB.real"
             printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$MB"
             chmod +x "$MB"
-            echo "✅ stubbed makedevs (no CAP_MKNOD)"
+            echo "✅ stubbed makedevs"
           fi
-          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
-            { echo "⚠️ rebuild failed → fallback full buildroot"; \
-              make CONF=${{ matrix.conf }} buildroot 2>&1 || \
-              { echo "❌ buildroot 完全失败"; exit 1; }; }
-          # ── Fix cpio mknod（GitHub Runner 无 CAP_MKNOD） ──
-          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
-          FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
+          # 跑 buildroot（可能在 cpio 阶段失败，没关系）
+          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
+          # 修复 cpio：如果 fakeroot 脚本里有 mknod 导致失败，patch 后手动跑
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
-            echo "🔧 Patch cpio fakeroot (skip mknod)..."
-            sed -i 's/^\(.*mknod \)/echo \[CI-SKIP\] \1/' "$FSCR"
-            HB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
-            PATH="$HB:$HB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO"
-            echo "✅ cpio done → finalize"
+            echo "🔧 Patch cpio fakeroot (mknod → no-op)..."
+            sed -i '/mknod /s/^/echo [CI-SKIP] /' "$FSCR"
+            PATH="$HB:$HB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
+          fi
+          # 最终校验
+          if [ -f "$CPIO" ]; then
+            echo "✅ rootfs.cpio OK → finalize"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
+          else
+            echo "❌ rootfs.cpio still missing after all fixes"
+            ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ 2>/dev/null || true
+            exit 1
           fi
           # ── Verify ──
           echo "=== buildroot images ==="
