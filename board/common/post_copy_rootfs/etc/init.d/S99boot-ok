@@ -1,0 +1,60 @@
+#!/bin/sh
+# /etc/init.d/S99boot-ok — A/B 升级启动确认脚本
+#
+# 在系统成功启动后执行（S99 序列最后一个）:
+#   1. 首次启动: 持久化 boot_slot=a（触发 attempt 保护）
+#   2. 每次启动: 将当前槽 attempt 重置为 boot_attempt_max
+#
+# 注意: 如果此脚本不能执行（rootfs 损坏 → kernel panic → watchdog 复位），
+# attempt 自然递减，3 次后 U-Boot 切到另一槽
+
+case "$1" in
+  start)
+    # 等待系统稳定
+    sleep 5
+
+    # 容错读取当前槽位
+    SLOT="$(fw_printenv -n boot_slot 2>/dev/null || true)"
+    case "$SLOT" in
+      a|b) ;;
+      *) SLOT=a ;;   # 空值或非法 → 默认 a
+    esac
+
+    # 容错读取最大尝试次数
+    MAX="$(fw_printenv -n boot_attempt_max 2>/dev/null || true)"
+    case "$MAX" in
+      [1-9]|[1-9][0-9]) ;;
+      *) MAX=3 ;;
+    esac
+
+    # 首次启动后持久化 boot_slot（向前兼容: 旧镜像的 env 里没有 boot_slot）
+    if ! fw_printenv -n boot_slot >/dev/null 2>&1; then
+        fw_setenv boot_slot a || true
+        logger -t boot-ok "First boot: persisted boot_slot=a (attempt protection enabled)"
+    fi
+
+    # 修复 bootcmd: fw_setenv 会重写整个 env 块，可能把 bootcmd 重置为 U-Boot 内置默认值
+    CUR_BOOTCMD=$(fw_printenv -n bootcmd 2>/dev/null || true)
+    case "$CUR_BOOTCMD" in
+        *run\ bootcmd_slot*) ;;   # 正确值，不动
+        *)
+            fw_setenv bootcmd 'run bootcmd_slot' || true
+            logger -t boot-ok "Fixed bootcmd (was: ${CUR_BOOTCMD})"
+            ;;
+    esac
+
+    # 重置当前槽 attempt
+    fw_setenv "boot_slot_${SLOT}_attempt" "$MAX" || true
+    logger -t boot-ok "Boot OK: slot=$SLOT, attempt reset to $MAX"
+    ;;
+  stop)
+    ;;
+  restart|reload)
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit 0

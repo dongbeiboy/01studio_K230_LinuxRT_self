@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# USB Hotplug OTA Handler
+# Called from mdev when a USB drive is inserted.
+# If an update.swu file is found in the root of the USB drive, flash it.
+#
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+logger -t ota-usb "USB device inserted: $MDEV / $ACTION"
+
+[ "$ACTION" != "add" ] && exit 0
+[ -z "$MDEV" ] && exit 0
+
+sleep 1  # Let the kernel probe the device
+
+for dev in /dev/sd[a-z]1 /dev/sd[a-z]2; do
+    if [ -b "$dev" ]; then
+        mp="/tmp/ota_usb_$$"
+        mkdir -p "$mp"
+        if mount "$dev" "$mp" 2>/dev/null; then
+            for swu in "$mp"/*.swu; do
+                if [ -f "$swu" ]; then
+                    logger -t ota-usb "Found $swu on USB, starting update..."
+                    umount "$mp"
+                    /usr/bin/swupdate -v -i "$swu" && reboot
+                    exit 0
+                fi
+            done
+            umount "$mp"
+        fi
+        rmdir "$mp" 2>/dev/null
+    fi
+done
+
+exit 0

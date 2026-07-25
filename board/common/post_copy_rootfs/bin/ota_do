@@ -1,0 +1,158 @@
+#!/bin/sh
+#
+# K230 Multi-OTA script
+# Usage: ota_do <method> [args]
+#
+# Methods:
+#   ota_do local /path/to/update.swu    - Local file update
+#   ota_do http  http://server/update.swu - Download and update
+#   ota_do sd                            - Auto-detect on SD FAT partition
+#   ota_do usb                           - Auto-detect on USB drive
+#   ota_do web                           - Start web-based OTA server
+#   ota_do web-stop                      - Stop web-based OTA server
+#
+
+SWUPDATE_BIN="/usr/bin/swupdate"
+SWUPDATE_WEB_LOG="/tmp/swupdate_web.log"
+WEB_PORT="${WEB_PORT:-9090}"
+WEB_DOCROOT="${WEB_DOCROOT:-/var/www/swupdate}"
+
+usage()
+{
+    echo "K230 OTA Update Tool"
+    echo ""
+    echo "  ota_do local <file>       Install from local .swu file"
+    echo "  ota_do http  <url>        Download from URL and install"
+    echo "  ota_do sd                 Auto-detect .swu on SD card (FAT partition)"
+    echo "  ota_do usb                Auto-detect .swu on USB drive"
+    echo "  ota_do web                Start web OTA server (port ${WEB_PORT})"
+    echo "  ota_do web-stop           Stop web OTA server"
+    echo "  ota_do status             Show OTA status"
+    exit 1
+}
+
+do_update()
+{
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        echo "ERROR: $file not found"
+        return 1
+    fi
+    echo "Installing update: $file ..."
+    ${SWUPDATE_BIN} -v -i "$file"
+    local ret=$?
+    if [ $ret -eq 0 ]; then
+        echo "Update successful! Rebooting..."
+        sync
+        sleep 2
+        reboot
+    else
+        echo "Update FAILED (exit code: $ret)"
+        return $ret
+    fi
+}
+
+find_swu_on_sd()
+{
+    # Check SD card FAT partition (mmcblk0p4 or /boot)
+    for dev in /dev/mmcblk0p4 /dev/mmcblk1p4; do
+        if [ -b "$dev" ]; then
+            local mp="/tmp/ota_sd"
+            mkdir -p "$mp"
+            if mount -t vfat "$dev" "$mp" 2>/dev/null; then
+                ls "$mp"/*.swu 2>/dev/null | head -1
+                umount "$mp"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+find_swu_on_usb()
+{
+    # Check USB drives
+    for dev in /dev/sd[a-z]1 /dev/sd[a-z]2 /dev/sd[a-z]3 /dev/sd[a-z]4; do
+        if [ -b "$dev" ]; then
+            local mp="/tmp/ota_usb"
+            mkdir -p "$mp"
+            if mount "$dev" "$mp" 2>/dev/null; then
+                ls "$mp"/*.swu 2>/dev/null | head -1
+                umount "$mp"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+case "$1" in
+    local)
+        [ -z "$2" ] && usage
+        do_update "$2"
+        ;;
+    http)
+        [ -z "$2" ] && usage
+        tmpfile="/tmp/ota_download.swu"
+        echo "Downloading from $2 ..."
+        rm -f "$tmpfile"
+        if wget -O "$tmpfile" "$2" 2>/dev/null; then
+            do_update "$tmpfile"
+        else
+            # fallback to curl
+            if curl -o "$tmpfile" "$2" 2>/dev/null; then
+                do_update "$tmpfile"
+            else
+                echo "ERROR: Download failed (wget and curl not available)"
+                exit 1
+            fi
+        fi
+        rm -f "$tmpfile"
+        ;;
+    sd)
+        swu_file=$(find_swu_on_sd)
+        if [ -n "$swu_file" ]; then
+            echo "Found update on SD: $swu_file"
+            do_update "$swu_file"
+        else
+            echo "No .swu file found on SD card."
+        fi
+        ;;
+    usb)
+        swu_file=$(find_swu_on_usb)
+        if [ -n "$swu_file" ]; then
+            echo "Found update on USB: $swu_file"
+            do_update "$swu_file"
+        else
+            echo "No .swu file found on USB drive."
+        fi
+        ;;
+    web)
+        pidof swupdate > /dev/null && { echo "SWUpdate web already running"; exit 0; }
+        echo "Starting SWUpdate web server on port ${WEB_PORT}..."
+        mkdir -p "$WEB_DOCROOT"
+        ${SWUPDATE_BIN} -v \
+            -w "--document-root ${WEB_DOCROOT} --port ${WEB_PORT} --listening-address 0.0.0.0" \
+            > "$SWUPDATE_WEB_LOG" 2>&1 &
+        echo "Web OTA server started (PID: $!)"
+        echo "Access: http://$(ip route get 1 2>/dev/null | awk '{print $7; exit}')/${WEB_PORT}"
+        ;;
+    web-stop)
+        echo "Stopping SWUpdate web server..."
+        killall swupdate 2>/dev/null
+        echo "Done."
+        ;;
+    status)
+        if pidof swupdate > /dev/null; then
+            echo "SWUpdate is running (web server active on port ${WEB_PORT})"
+        else
+            echo "SWUpdate is not running."
+        fi
+        echo ""
+        echo "Interface status:"
+        ip addr show 2>/dev/null | grep -E "inet " | awk '{print "  "$2"  ("$NF")"}'
+        ;;
+    *)
+        usage
+        ;;
+esac

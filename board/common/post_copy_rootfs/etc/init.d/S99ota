@@ -1,0 +1,35 @@
+#! /bin/sh
+#
+# S99ota - Start SWUpdate web server on boot (if network is available)
+# To enable: touch /etc/ota_auto_start
+#
+
+SWUPDATE_BIN="/usr/bin/swupdate"
+
+case "$1" in
+    start)
+        if [ -f /etc/ota_auto_start ]; then
+            echo "Waiting for network..."
+            for i in $(seq 1 15); do
+                if ip route get 1 2>/dev/null | grep -q "via"; then
+                    break
+                fi
+                sleep 2
+            done
+            echo "Starting SWUpdate OTA server..."
+            mkdir -p /var/www/swupdate
+            ${SWUPDATE_BIN} -v \
+                -w "--document-root /var/www/swupdate --port 9090 --listening-address 0.0.0.0" \
+                > /var/log/swupdate.log 2>&1 &
+        fi
+        ;;
+    stop)
+        killall swupdate 2>/dev/null
+        ;;
+    restart)
+        $0 stop; sleep 1; $0 start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        ;;
+esac

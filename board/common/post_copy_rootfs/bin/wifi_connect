@@ -1,0 +1,79 @@
+#!/bin/sh
+#
+# K230 WiFi Connection Script
+# Usage: wifi_connect <SSID> <PASSWORD>
+#
+
+CONFIG_FILE="/etc/wpa_supplicant.conf"
+IFACE="wlan0"
+
+[ $# -lt 1 ] && {
+    echo "Usage: wifi_connect <SSID> [PASSWORD]"
+    echo "       wifi_connect scan     - scan nearby APs"
+    echo "       wifi_connect status   - show connection status"
+    echo "       wifi_connect off      - disconnect"
+    exit 1
+}
+
+case "$1" in
+    scan)
+        ifconfig $IFACE up 2>/dev/null
+        iwlist $IFACE scan 2>/dev/null | grep -E "ESSID|Signal|Encryption" | head -30
+        ;;
+    status)
+        echo "=== Interface: $IFACE ==="
+        ifconfig $IFACE 2>/dev/null
+        echo ""
+        echo "=== IP Address ==="
+        ip addr show $IFACE 2>/dev/null | grep inet
+        echo ""
+        echo "=== Routes ==="
+        ip route 2>/dev/null | grep $IFACE
+        ;;
+    off)
+        killall wpa_supplicant 2>/dev/null
+        ifconfig $IFACE down 2>/dev/null
+        echo "WiFi disconnected."
+        ;;
+    *)
+        SSID="$1"
+        PASS="${2:-}"
+
+        # Generate wpa_supplicant config
+        cat > $CONFIG_FILE << EOF
+ctrl_interface=/var/run/wpa_supplicant
+update_config=1
+
+network={
+    ssid="$SSID"
+EOF
+        if [ -n "$PASS" ]; then
+            echo "    psk=\"$PASS\"" >> $CONFIG_FILE
+            echo "    key_mgmt=WPA-PSK" >> $CONFIG_FILE
+        else
+            echo "    key_mgmt=NONE" >> $CONFIG_FILE
+        fi
+        cat >> $CONFIG_FILE << EOF
+}
+EOF
+
+        # Kill any existing wpa_supplicant
+        killall wpa_supplicant 2>/dev/null
+        sleep 1
+
+        # Bring up interface
+        ifconfig $IFACE up
+        sleep 1
+
+        # Start wpa_supplicant
+        wpa_supplicant -D nl80211 -i $IFACE -c $CONFIG_FILE -B
+        sleep 3
+
+        # Get IP via DHCP
+        udhcpc -i $IFACE -b -t 10 -n
+
+        echo ""
+        echo "WiFi connected."
+        ip addr show $IFACE 2>/dev/null | grep "inet "
+        ;;
+esac
