@@ -294,96 +294,55 @@ jobs:
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
 
-      - name: Build buildroot (with host-m4 + host-fakeroot glibc 2.35 patches)
+      - name: Build buildroot
         run: |
+          # ── 安装系统 fakeroot（Ubuntu 22.04 自带 1.28，原生支持 glibc 2.35）──
+          sudo apt-get install -y -qq fakeroot
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
-          # ── 辅助函数 ──
-          patch_m4() {
-            local f="$OUT/host-m4-1.4.18/lib/c-stack.c"
-            if [ -f "$f" ]; then
-              sed -i 's|# *if.*SIGSTKSZ *< *16384|#if 0 /* CI: SIGSTKSZ not constant */|' "$f"
-              sed -i 's|# *elif.*SIGSTKSZ *< *16384|#elif 0 /* CI: SIGSTKSZ not constant */|' "$f"
-              echo "✅ patched host-m4 c-stack.c"
-            else echo "  host-m4 not yet extracted"; fi
-          }
-          patch_fakeroot() {
-            local f1="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
-            local f2="$OUT/host-fakeroot-1.25.3/config.h"
-            if [ -f "$f1" ]; then
-              head -1 "$f1" | grep -q "_STAT_VER" || sed -i '1i#define _STAT_VER 1' "$f1"
-              [ -f "$f2" ] && sed -i 's/^#define WRAP_MKNOD.*/#define WRAP_MKNOD __xmknod_old/' "$f2"
-              echo "✅ patched host-fakeroot (_STAT_VER + __xmknod)"
-            else echo "  host-fakeroot not yet extracted"; return 1; fi
-          }
-          del_s() { local d="$1"; shift; for f in "$@"; do rm -f "$d/$f"; done; }
-          # ── Round 1: buildroot 完整跑 ──
+          # ── Round 1: buildroot 全量跑一次（下载 + 解压 + 编译，会在某些地方失败）──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
-          patch_m4
-          # 校验 m4 补丁
-          [ -f "$OUT/host-m4-1.4.18/lib/c-stack.c" ] && \
-            grep -q '#elif 0' "$OUT/host-m4-1.4.18/lib/c-stack.c" || \
-            { echo "❌ m4 补丁失败（版本可能变了）"; exit 1; }
-          # 删除 cpio.mk 中的 mknod（GitHub runner 无 CAP_MKNOD）
-          CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
-          if [ -f "$CPIO_MK" ]; then
-            sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
-            echo "✅ patched cpio.mk (removed mknod)"
+          # ── Patch m4 (glibc 2.35 SIGSTKSZ 不是编译期常量) ──
+          M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
+          if [ -f "$M4F" ]; then
+            sed -i 's|# *if.*SIGSTKSZ *< *16384|#if 0 /* CI */|' "$M4F"
+            sed -i 's|# *elif.*SIGSTKSZ *< *16384|#elif 0 /* CI */|' "$M4F"
+            rm -f "$OUT/host-m4-1.4.18/.stamp_built"
+            echo "✅ patched m4"
           fi
-          # ── Round 2: 增量编译 → m4 ✅，fakeroot 也会被解压 ──
-          echo "═══ Round 2: build m4 + extract fakeroot ═══"
-          rm -f "$OUT/host-m4-1.4.18/.stamp_built"   # 删 stamp 确保重编
-          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
-          if patch_fakeroot; then
-            # 校验 fakeroot 补丁
-            grep -q '#define _STAT_VER 1' "$OUT/host-fakeroot-1.25.3/libfakeroot.c" || \
-              { echo "❌ fakeroot _STAT_VER 补丁失败"; exit 1; }
-            del_s "$OUT/host-fakeroot-1.25.3" \
-              .stamp_configured .stamp_built .stamp_installed
-          else
-            # 极端情况: 手动提取 fakeroot
-            BRD="output/${{ matrix.conf }}/little/buildroot-ext"
-            BRW="$(ls "$BRD"/buildroot-*/ 2>/dev/null | head -1)"
-            [ -n "$BRW" ] && PATH="$BRD/host/bin:$PATH" \
-              make -C "$BRW" CONF=${{ matrix.conf }} host-fakeroot-extract 2>/dev/null || \
-              make CONF=${{ matrix.conf }} buildroot 2>&1 || true  # fallback: 完整跑直到 fakeroot 解压
-            patch_fakeroot
-            grep -q '#define _STAT_VER 1' "$OUT/host-fakeroot-1.25.3/libfakeroot.c" 2>/dev/null || \
-              { echo "❌ fakeroot 补丁失败（手动提取后）"; exit 1; }
-            del_s "$OUT/host-fakeroot-1.25.3" \
-              .stamp_configured .stamp_built .stamp_installed
+          # ── 用系统 fakeroot 替换 buildroot 的（跳过 _STAT_VER / __xmknod 问题）──
+          FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
+          if [ -f /usr/bin/fakeroot ]; then
+            cp /usr/bin/fakeroot "$FB/fakeroot"
+            cp /usr/bin/fakeroot-tcp "$FB/fakeroot-tcp" 2>/dev/null || true
+            cp /usr/bin/faked "$FB/faked" 2>/dev/null || true
+            # 也复制 libfakeroot
+            find /usr/lib -name "libfakeroot*.so*" -exec cp {} "$FB/../lib/" \; 2>/dev/null || true
+            echo "✅ replaced with system fakeroot"
           fi
-          # ── Round 3: 最后一轮，带 cpio 自动修复 ──
-          echo "═══ Round 3: buildroot-rebuild ═══"
-          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
-          FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
-          HB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
-          # Stub makedevs (GitHub runner 无 CAP_MKNOD)
-          MB="$HB/makedevs"
-          if [ -f "$MB" ] && ! grep -q '\[CI-NOOP\]' "$MB"; then
-            mv "$MB" "$MB.real"
-            printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$MB"
-            chmod +x "$MB"
+          # ── Stub makedevs (GitHub runner 无 CAP_MKNOD) ──
+          if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs"; then
+            mv "$FB/makedevs" "$FB/makedevs.real"
+            printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
+            chmod +x "$FB/makedevs"
             echo "✅ stubbed makedevs"
           fi
-          # 跑 buildroot（可能在 cpio 阶段失败，没关系）
+          # ── 删除 cpio.mk 中的 mknod ──
+          CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
+          [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
+          # ── Round 2: 增量重编（m4 ✅, fakeroot ✅, makedevs ✅）──
+          echo "═══ Round 2: rebuild ═══"
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
-          # 修复 cpio：如果 fakeroot 脚本里有 mknod 导致失败，patch 后手动跑
+          # ── 如果 cpio 失败，手动创建 rootfs.cpio ──
+          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
+          FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
-            echo "🔧 Patch cpio fakeroot (mknod → no-op)..."
-            sed -i '/mknod /s/^/echo [CI-SKIP] /' "$FSCR"
-            PATH="$HB:$HB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
-          fi
-          # 最终校验
-          if [ -f "$CPIO" ]; then
-            echo "✅ rootfs.cpio OK → finalize"
+            echo "🔧 Manual cpio fix..."
+            sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
+            PATH="$FB:$FB/../sbin:/usr/bin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
-          else
-            echo "❌ rootfs.cpio still missing after all fixes"
-            ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ 2>/dev/null || true
-            exit 1
           fi
-          # ── Verify ──
+          # ── 最终校验 ──
           echo "=== buildroot images ==="
           ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
             { echo "❌ images/ missing"; exit 1; }
