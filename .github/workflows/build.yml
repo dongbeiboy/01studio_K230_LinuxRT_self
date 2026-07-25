@@ -210,8 +210,8 @@ jobs:
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           patch_m4
           patch_fakeroot
-          echo "Round 3: final build..."
-          make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
+          echo "Round 3: final build (under fakeroot for mknod support)..."
+          fakeroot make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
