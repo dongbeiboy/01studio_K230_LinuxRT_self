@@ -74,6 +74,14 @@ jobs:
             python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
+      - name: Restore ccache
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-big-${{ github.run_number }}-v1
+          restore-keys: ccache-big-
+
       - name: Restore toolchain cache
         id: cache-tc
         uses: actions/cache@v4
@@ -107,10 +115,19 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
+      - name: Configure ccache
+        run: |
+          ccache -M 1G -F 0 -z
+          mkdir -p /usr/lib/ccache
+          for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
+            [ -f "$cc" ] && ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
+          done
+          echo "ccache symlinks:" && ls /usr/lib/ccache/
+
       - name: Build big core (RTT + MPP + OpenSBI)
         run: make CONF=${{ matrix.conf }} rt-smart
         env:
-          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
 
       - name: Upload big core outputs
@@ -153,6 +170,14 @@ jobs:
             python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
+      - name: Restore ccache
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-little-${{ github.run_number }}-v1
+          restore-keys: ccache-little-
+
       - name: Restore toolchain cache
         id: cache-tc
         uses: actions/cache@v4
@@ -186,10 +211,19 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
+      - name: Configure ccache
+        run: |
+          ccache -M 1G -F 0 -z
+          mkdir -p /usr/lib/ccache
+          for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
+            [ -f "$cc" ] && ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
+          done
+          echo "ccache symlinks:" && ls /usr/lib/ccache/
+
       - name: Build Linux + U-Boot + little-core OpenSBI
         run: make CONF=${{ matrix.conf }} linux uboot little-core-opensbi
         env:
-          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
 
       - name: Upload linux/uboot/opensbi outputs
@@ -231,6 +265,14 @@ jobs:
             python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
+      - name: Restore ccache
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-rootfs-${{ github.run_number }}-v1
+          restore-keys: ccache-rootfs-
+
       - name: Restore toolchain cache
         id: cache-tc
         uses: actions/cache@v4
@@ -263,6 +305,15 @@ jobs:
 
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+
+      - name: Configure ccache
+        run: |
+          ccache -M 1G -F 0 -z
+          mkdir -p /usr/lib/ccache
+          for cc in /opt/toolchain/*/bin/*-gcc /opt/toolchain/*/bin/*-g++; do
+            [ -f "$cc" ] && ln -sf /usr/bin/ccache "/usr/lib/ccache/$(basename $cc)"
+          done
+          echo "ccache symlinks:" && ls /usr/lib/ccache/
 
       - name: Build buildroot (with host-m4 + host-fakeroot glibc 2.35 patches)
         run: |
@@ -323,7 +374,7 @@ jobs:
               make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           fi
         env:
-          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          PATH: /usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
 
       - name: Upload buildroot outputs
