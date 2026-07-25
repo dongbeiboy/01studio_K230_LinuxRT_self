@@ -318,6 +318,12 @@ jobs:
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           patch_m4
+          # Patch buildroot source cpio.mk: disable mknod (GitHub runner lacks CAP_MKNOD)
+          CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
+          if [ -f "$CPIO_MK" ]; then
+            sed -i 's|mknod -m .*/dev/console.*|echo [CI-SKIP] mknod /dev/console|' "$CPIO_MK"
+            echo "✅ patched cpio.mk (skip mknod)"
+          fi
           # ── Round 2: 增量编译 → m4 ✅，fakeroot 也会被解压 ──
           echo "═══ Round 2: build m4 + extract fakeroot ═══"
           rm -f "$OUT/host-m4-1.4.18/.stamp_built"   # 删 stamp 确保重编
@@ -340,7 +346,7 @@ jobs:
           echo "═══ Round 3: buildroot-rebuild ═══"
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
             { echo "⚠️ rebuild failed → fallback full buildroot"; \
-              make CONF=${{ matrix.conf }} buildroot; }
+              make CONF=${{ matrix.conf }} buildroot 2>&1 || true; }
           # ── Fix cpio mknod（GitHub Runner 无 CAP_MKNOD） ──
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
@@ -350,8 +356,7 @@ jobs:
             HB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
             PATH="$HB:$HB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO"
             echo "✅ cpio done → finalize"
-            make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
-              make CONF=${{ matrix.conf }} buildroot
+            make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
           # ── Verify ──
           echo "=== buildroot images ==="
