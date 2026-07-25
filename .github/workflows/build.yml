@@ -314,15 +314,15 @@ jobs:
             else echo "  host-fakeroot not yet extracted"; return 1; fi
           }
           del_s() { local d="$1"; shift; for f in "$@"; do rm -f "$d/$f"; done; }
-          # ── Round 1: buildroot 完整跑（m4 必然失败，但会解压源码） ──
+          # ── Round 1: buildroot 完整跑 ──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           patch_m4
-          # Patch buildroot source cpio.mk: disable mknod (GitHub runner lacks CAP_MKNOD)
+          # 删除 cpio.mk 中的 mknod（GitHub runner 无 CAP_MKNOD）
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           if [ -f "$CPIO_MK" ]; then
-            sed -i 's|mknod -m .*/dev/console.*|echo [CI-SKIP] mknod /dev/console|' "$CPIO_MK"
-            echo "✅ patched cpio.mk (skip mknod)"
+            sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
+            echo "✅ patched cpio.mk (removed mknod)"
           fi
           # ── Round 2: 增量编译 → m4 ✅，fakeroot 也会被解压 ──
           echo "═══ Round 2: build m4 + extract fakeroot ═══"
