@@ -8,6 +8,7 @@
 #ifndef _CANAAN_DSI_H_
 #define _CANAAN_DSI_H_
 
+#include <linux/ioport.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_mipi_dsi.h>
@@ -19,7 +20,7 @@ struct canaan_dsi {
 
 	struct clk		*bus_clk;
 	struct clk		*mod_clk;
-	struct regmap		*regs;
+	void __iomem		*base;
 	struct regulator	*regulator;
 	struct reset_control	*reset;
 	struct phy		*dphy;

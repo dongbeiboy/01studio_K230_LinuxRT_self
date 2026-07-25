@@ -22,13 +22,13 @@
 
 	chosen {
 		bootargs = "";
-		linux,initrd-start = <0x0 0xa100000>;
+		linux,initrd-start = <0x0 0x32100000>;
 		linux,initrd-end = <0x0 0x0>;
 		stdout-path = "serial0:115200";
 	};
 };
 &ddr {
-	reg = <0x0 0x8200000 0x0 0x7dff000>;  /*linux memory config*/
+	reg = <0x0 0x30200000 0x0 0xfe00000>;  /*linux memory config*/
 };
 
 &usbotg0 {
@@ -66,7 +66,16 @@
 &gpio23 {
     status = "okay";
 };
-/* // conflict with HDMI
+
+&gpio24 {
+    status = "okay";
+};
+
+&gpio25 {
+    status = "okay";
+};
+
+/* // conflict with HDMI */
 &i2c3 {
 	status = "okay";
 	touchscreen@38 {
@@ -77,4 +86,53 @@
 		reset-gpios = <&port22 0 GPIO_ACTIVE_LOW>;
 	};
 };
-*/
+
+&dsi {
+    status = "okay";
+
+    panel@0 {
+        compatible = "canaan,hx8399";
+        reg = <0>;
+        reset-gpios = <&port24 0 GPIO_ACTIVE_HIGH>;
+        backlight-gpios = <&port25 0 GPIO_ACTIVE_HIGH>;
+
+        display-timings {
+            timing-0 {
+                clock-frequency = <30000000>;
+                hactive = <800>;
+                vactive = <480>;
+                hfront-porch = <40>;
+                hback-porch = <40>;
+                hsync-len = <48>;
+                vfront-porch = <13>;
+                vback-porch = <32>;
+                vsync-len = <3>;
+            };
+        };
+    };
+};
+
+&dsi {
+	status = "okay";
+
+	panel@0 {
+		compatible = "canaan,hx8399";
+		reg = <0>;
+		panel-width-mm = <70>;
+		panel-height-mm = <121>;
+
+		display-timings {
+			timing-0 {
+				clock-frequency = <30000000>;
+				hactive = <800>;
+				vactive = <480>;
+				hfront-porch = <40>;
+				hback-porch = <40>;
+				hsync-len = <48>;
+				vfront-porch = <13>;
+				vback-porch = <32>;
+				vsync-len = <3>;
+			};
+		};
+	};
+};
