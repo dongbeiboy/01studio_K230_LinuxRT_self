@@ -10,7 +10,6 @@ on:
 env:
   BUILD_CONFS: |
     k230_canmv_01studio_defconfig
-    k230_canmv_defconfig
 
 jobs:
   # ============================================================
@@ -56,7 +55,6 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
-          - k230_canmv_defconfig
 
     steps:
       - uses: actions/checkout@v4
@@ -133,7 +131,6 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
-          - k230_canmv_defconfig
 
     steps:
       - uses: actions/checkout@v4
@@ -240,7 +237,6 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
-          - k230_canmv_defconfig
 
     steps:
       - uses: actions/checkout@v4
