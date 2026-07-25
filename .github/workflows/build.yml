@@ -187,7 +187,26 @@ jobs:
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
       - name: Build little core (Linux + U-Boot + Buildroot + OpenSBI)
-        run: make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
+        run: |
+          errors=0
+          make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi 2>&1 || errors=$?
+          if [ "$errors" -ne 0 ]; then
+            echo "⚠️  First build failed (expected: host-m4 glibc 2.35 issue). Applying patches..."
+            # Fix host-m4: glibc 2.35 removed SIGSTKSZ constant
+            M4_DIR="output/${{ matrix.conf }}/little/buildroot-ext/build/host-m4-1.4.18"
+            if [ -f "$M4_DIR/lib/c-stack.c" ]; then
+              sed -i 's|#elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384|#elif 0|' "$M4_DIR/lib/c-stack.c"
+              echo "✅ patched host-m4 c-stack.c"
+            fi
+            # Fix host-fakeroot: glibc 2.35 renamed __xmknod → __xmknod_old
+            FAKEROOT_DIR="output/${{ matrix.conf }}/little/buildroot-ext/build/host-fakeroot-1.25.3"
+            if [ -f "$FAKEROOT_DIR/config.h" ]; then
+              sed -i 's/#define WRAP_MKNOD __xmknod$/#define WRAP_MKNOD __xmknod_old/' "$FAKEROOT_DIR/config.h"
+              echo "✅ patched host-fakeroot config.h"
+            fi
+            echo "🔁 Retrying full build..."
+            make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
+          fi
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
