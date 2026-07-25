@@ -73,7 +73,7 @@ jobs:
             autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
             libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
             python3 python3-pip python-is-python3 scons wget curl
-          pip3 install --break-system-packages pycryptodome gmssl
+          pip3 install pycryptodome gmssl
 
       - name: Install genimage
         run: |
