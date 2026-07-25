@@ -42,13 +42,15 @@ jobs:
             -exec shellcheck -S warning {} + 2>/dev/null || true
 
   # ============================================================
-  # 全量编译：打 tag v* 时触发
+  # 全量编译（并行）：大核 + 小核 同时构建
   # ============================================================
-  build:
-    name: Build ${{ matrix.conf }}
+
+  # ── 大核：RTT / MPP / Big-core OpenSBI ──
+  build-big:
+    name: "Big ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +63,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ---- 系统依赖 ----
       - name: Install system dependencies
         run: |
           sudo dpkg --add-architecture i386
@@ -75,31 +76,13 @@ jobs:
             python3 python3-pip python-is-python3 scons wget curl
           pip3 install pycryptodome gmssl
 
-      - name: Install genimage
-        run: |
-          wget -q https://github.com/pengutronix/genimage/releases/download/v16/genimage-16.tar.xz \
-            -O /tmp/genimage.tar.xz
-          cd /tmp && tar -xf genimage.tar.xz
-          cd genimage-16
-          ./configure && make -j"$(nproc)" && sudo make install
-          genimage --version
-
-      # ---- 缓存：工具链 (~1.5GB) ----
       - name: Restore toolchain cache
         id: cache-tc
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile') }}-v1
+          key: toolchain-${{ hashFiles('Makefile') }}-v2
 
-      - name: Mark toolchain ready (cache hit)
-        if: steps.cache-tc.outputs.cache-hit == 'true'
-        run: |
-          mkdir -p toolchain
-          touch toolchain/.toolchain_ready
-          echo "✅ Toolchain restored from cache"
-
-      # ---- 缓存：源码下载 ----
       - name: Restore source cache
         id: cache-src
         uses: actions/cache@v4
@@ -113,30 +96,177 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile') }}-v1
+          key: sources-${{ hashFiles('Makefile') }}-v2
 
-      - name: Prepare source code
-        run: |
-          if [ -f src/.src_fetched ] && [ -f toolchain/.toolchain_ready ]; then
-            echo "✅ All sources and toolchains cached — skip download"
-          else
-            echo "⬇ Downloading toolchains + sources..."
-            make prepare_sourcecode
-            echo "✅ Download complete"
-          fi
-        env:
-          CONF: ${{ matrix.conf }}
+      - name: Prepare toolchain & sources
+        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
+        run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
-      # ---- 编译 ----
-      - name: Build SDK
-        run: |
-          make CONF=${{ matrix.conf }}
+      - name: Mark toolchain ready (cache hit)
+        if: steps.cache-tc.outputs.cache-hit == 'true'
+        run: mkdir -p toolchain && touch toolchain/.toolchain_ready
+
+      - name: Link toolchain to /opt/toolchain
+        run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+
+      - name: Build big core (RTT + MPP + OpenSBI)
+        run: make CONF=${{ matrix.conf }} rt-smart
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        timeout-minutes: 300
+        timeout-minutes: 150
 
-      # ---- 打包产物 ----
-      - name: Package release artifacts
+      - name: Upload big core outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.conf }}-big
+          path: output/${{ matrix.conf }}/big/
+          retention-days: 1
+
+  # ── 小核：Linux / U-Boot / Buildroot / Little-core OpenSBI ──
+  build-little:
+    name: "Little ${{ matrix.conf }}"
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        conf:
+          - k230_canmv_01studio_defconfig
+          - k230_canmv_defconfig
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake flex bison m4 fakeroot attr zlib1g-dev \
+            bc cpio unzip rsync file make binutils build-essential \
+            gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
+            autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
+            libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
+            python3 python3-pip python-is-python3 scons wget curl
+          pip3 install pycryptodome gmssl
+
+      - name: Restore toolchain cache
+        id: cache-tc
+        uses: actions/cache@v4
+        with:
+          path: toolchain
+          key: toolchain-${{ hashFiles('Makefile') }}-v2
+
+      - name: Restore source cache
+        id: cache-src
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/.src_fetched
+            src/big/utils
+            src/big/ai
+            src/big/kmodel
+            src/big/nncase
+            src/little/utils/firmware
+            src/little/buildroot-ext/dl
+            src/little/buildroot-ext/package/tuning-server
+          key: sources-${{ hashFiles('Makefile') }}-v2
+
+      - name: Prepare toolchain & sources
+        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
+        run: make prepare_sourcecode CONF=${{ matrix.conf }}
+
+      - name: Mark toolchain ready (cache hit)
+        if: steps.cache-tc.outputs.cache-hit == 'true'
+        run: mkdir -p toolchain && touch toolchain/.toolchain_ready
+
+      - name: Link toolchain to /opt/toolchain
+        run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+
+      - name: Build little core (Linux + U-Boot + Buildroot + OpenSBI)
+        run: make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
+        env:
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        timeout-minutes: 150
+
+      - name: Upload little core outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.conf }}-little
+          path: |
+            output/${{ matrix.conf }}/little/
+            output/${{ matrix.conf }}/common/
+          retention-days: 1
+
+  # ── 合并：下载大核+小核产物 → 打包镜像 ──
+  merge:
+    name: "Merge ${{ matrix.conf }}"
+    if: github.ref_type == 'tag'
+    needs: [build-big, build-little]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        conf:
+          - k230_canmv_01studio_defconfig
+          - k230_canmv_defconfig
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install genimage + tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            fakeroot dosfstools mtools cpio unzip rsync file bc
+          wget -q https://github.com/pengutronix/genimage/releases/download/v16/genimage-16.tar.xz \
+            -O /tmp/genimage.tar.xz
+          cd /tmp && tar -xf genimage.tar.xz
+          cd genimage-16 && ./configure && make -j"$(nproc)" && sudo make install
+
+      - name: Prepare output structure
+        run: |
+          mkdir -p output/${{ matrix.conf }}/images
+          touch src/.src_fetched
+          make CONF=${{ matrix.conf }} prepare_memory
+        env:
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+      - name: Restore toolchain
+        uses: actions/cache@v4
+        with:
+          path: toolchain
+          key: toolchain-${{ hashFiles('Makefile') }}-v2
+
+      - name: Link toolchain to /opt/toolchain
+        run: |
+          sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+          ls /opt/toolchain/*/bin/*gcc 2>/dev/null || echo "⚠️ toolchain incomplete — check may fail"
+
+      - name: Download big core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.conf }}-big
+          path: output/${{ matrix.conf }}/big/
+
+      - name: Download little core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.conf }}-little
+          path: output/${{ matrix.conf }}/
+
+      - name: Build image
+        run: |
+          mkdir -p output/${{ matrix.conf }}/images
+          make CONF=${{ matrix.conf }} build-image
+        env:
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+      - name: Package release
         run: |
           mkdir -p release
           IMG="output/${{ matrix.conf }}/images/sysimage-sdcard.img.gz"
@@ -144,12 +274,12 @@ jobs:
             cp "$IMG" "release/${{ matrix.conf }}_sysimage-sdcard.img.gz"
             ls -lh release/
           else
-            echo "⚠️ Image not found: $IMG"
-            ls -lR output/${{ matrix.conf }}/images/ || true
+            echo "❌ Image not found: $IMG"
+            find output/${{ matrix.conf }}/images/ -type f | head -20
             exit 1
           fi
 
-      - name: Upload artifact
+      - name: Upload final image
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.conf }}
@@ -162,7 +292,7 @@ jobs:
   release:
     name: GitHub Release
     if: github.ref_type == 'tag'
-    needs: build
+    needs: merge
     runs-on: ubuntu-22.04
     steps:
       - name: Download all artifacts
