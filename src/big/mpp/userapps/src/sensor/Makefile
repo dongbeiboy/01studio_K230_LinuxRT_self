@@ -30,7 +30,7 @@ $(LIB): $(OBJS)
 	$(AR) $(ARFLAGS) $@ $(OBJS)
 
 k230dwmapgen:
-	cmake -S $(LOCAL_SRC_DIR)/dewarp/k230dwmapgen -B build
+	CC=gcc CXX=g++ cmake -DCMAKE_C_COMPILER_WORKS=1 -S $(LOCAL_SRC_DIR)/dewarp/k230dwmapgen -B build
 	cmake --build build -j
 
 $(DWCFGS): %.bin : %.yml k230dwmapgen

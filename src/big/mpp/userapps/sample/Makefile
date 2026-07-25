@@ -7,7 +7,7 @@ all:
 	@mkdir -p $(FASTBOOT_BUILD_DIR)
 	@mkdir -p $(TRIPLE_CAMERA_BUILD_DIR)
 	@mkdir -p $(SAMPLE_LVGL_BUILD_DIR)
-	@cmake -S sample_lvgl -B $(SAMPLE_LVGL_BUILD_DIR) && cmake --build $(SAMPLE_LVGL_BUILD_DIR) -j && make -C $(SAMPLE_LVGL_BUILD_DIR) install
+	@cmake -DCMAKE_C_COMPILER_WORKS=1 -DCMAKE_CXX_COMPILER_WORKS=1 -S sample_lvgl -B $(SAMPLE_LVGL_BUILD_DIR) && cmake --build $(SAMPLE_LVGL_BUILD_DIR) -j && make -C $(SAMPLE_LVGL_BUILD_DIR) install
 	$(MAKE) -C tiger
 	$(MAKE) -C sample_gpu_cube
 	@cd sample_audio; make || exit 1
@@ -41,9 +41,9 @@ all:
 	@cd sample_vdv; make || exit 1
 	@cd sample_face_ae; make || exit 1
 	@cd sample_face_detect; make || exit 1
-	@cd fastboot_app; mkdir -p $(FASTBOOT_BUILD_DIR); cd $(FASTBOOT_BUILD_DIR); cmake $(MPP_SRC_DIR)/userapps/sample/fastboot_app;  make && make install;
+	@cd fastboot_app; mkdir -p $(FASTBOOT_BUILD_DIR); cd $(FASTBOOT_BUILD_DIR); cmake -DCMAKE_C_COMPILER_WORKS=1 -DCMAKE_CXX_COMPILER_WORKS=1 $(MPP_SRC_DIR)/userapps/sample/fastboot_app;  make && make install;
 	@cd sample_dpu_vicap; make || exit 1
-	@cd sample_triple_camera_facedetect; mkdir -p $(TRIPLE_CAMERA_BUILD_DIR); cd $(TRIPLE_CAMERA_BUILD_DIR); cmake $(MPP_SRC_DIR)/userapps/sample/sample_triple_camera_facedetect;  make && make install;
+	@cd sample_triple_camera_facedetect; mkdir -p $(TRIPLE_CAMERA_BUILD_DIR); cd $(TRIPLE_CAMERA_BUILD_DIR); cmake -DCMAKE_C_COMPILER_WORKS=1 -DCMAKE_CXX_COMPILER_WORKS=1 $(MPP_SRC_DIR)/userapps/sample/sample_triple_camera_facedetect;  make && make install;
 	@cd sample_dpu_vo; make || exit 1
 	@cd sample_pwm; make || exit 1
 	@cd sample_pm; make || exit 1

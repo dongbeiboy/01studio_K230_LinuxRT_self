@@ -18,15 +18,15 @@ platform-runcmd = qemu-system-riscv$(PLATFORM_RISCV_XLEN) -M virt -m 256M \
   -nographic -bios $(build_dir)/platform/generic/firmware/fw_payload.elf
 
 # Blobs to build
-FW_TEXT_START=0x8000000
+FW_TEXT_START=0x30000000
 FW_DYNAMIC=y
 FW_JUMP=y
 ifeq ($(PLATFORM_RISCV_XLEN), 32)
   # This needs to be 4MB aligned for 32-bit system
-  FW_JUMP_ADDR=0x8200000
+  FW_JUMP_ADDR=0x30200000
 else
   # This needs to be 2MB aligned for 64-bit system
-  FW_JUMP_ADDR=0x8200000
+  FW_JUMP_ADDR=0x30200000
 endif
 FW_JUMP_FDT_ADDR=$(shell printf "0x%X" $$(($(FW_TEXT_START) + 0x2000000)))
 FW_PAYLOAD=y

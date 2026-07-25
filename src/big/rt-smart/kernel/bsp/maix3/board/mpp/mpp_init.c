@@ -23,11 +23,11 @@ extern int log_init(void);
 
 /********************MMZ*****************************/
 #ifndef MEM_MMZ_BASE
-#define MEM_MMZ_BASE 0x10000000UL
+#define MEM_MMZ_BASE 0x40000000UL
 #endif
 
 #ifndef MEM_MMZ_SIZE
-#define MEM_MMZ_SIZE 0xfbff000UL
+#define MEM_MMZ_SIZE 0x40000000UL
 #endif
 int __attribute__((weak)) mmz_init(unsigned long  mmz_start, unsigned long mmz_size)
 {

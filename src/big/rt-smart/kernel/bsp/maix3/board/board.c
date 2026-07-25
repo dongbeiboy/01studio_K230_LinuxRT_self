@@ -57,7 +57,7 @@ void init_bss(void)
 
 #define MEM_RESVERD_SIZE    0x1000      /*隔离区*/
 #define MEM_IPCM_BASE 0x100000
-#define MEM_IPCM_SIZE 0xff000
+#define MEM_IPCM_SIZE 0x100000
 
 
 void init_ipcm_mem(void)

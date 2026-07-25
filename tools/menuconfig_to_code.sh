@@ -331,15 +331,10 @@ modify_gen_image_sd_cfg()
 {
 
     local CFG=${K230_SDK_ROOT}/board/common/gen_image_cfg/${GENIMAGE_CFG_DIR}/genimage-sdcard.cfg
-    if [  "$CONFIG_SUPPORT_LINUX"  = "y" ]; then
-        sed -i "s/gpt = .*/gpt = \"true\"/" ${CFG}
-        sed -i "s/partition-type =.*0x83/partition-type-uuid = \"L\"/" ${CFG}  #partition-type = 0x83
-        sed -i "s/partition-type =.*0xc/partition-type-uuid = \"F\"/" ${CFG}  #partition-type = 0xc
-    else
-        sed -i "s/gpt = .*/gpt = \"false\"/" ${CFG}
-        sed -i "s/partition-type-uuid =.*L.*/partition-type = 0x83/" ${CFG}  #partition-type = 0x83
-        sed -i "s/partition-type-uuid =.*F.*/partition-type = 0xc/" ${CFG}  #partition-type = 0xc
-    fi
+    # Always use MBR (not GPT) to avoid GPT backup table mismatch when dd to larger SD cards
+    sed -i "s/gpt = .*/gpt = \"false\"/" ${CFG}
+    sed -i "s/partition-type-uuid =.*L.*/partition-type = 0x83/" ${CFG}  #partition-type = 0x83
+    sed -i "s/partition-type-uuid =.*F.*/partition-type = 0xc/" ${CFG}  #partition-type = 0xc
 }
 
 function modify_uboot_file()

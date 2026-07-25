@@ -17,7 +17,7 @@ extern unsigned int __bss_start;
 extern unsigned int __bss_end;
 
 #define MEMORY_RESERVED     0x1000
-#define RAM_END 0x7fff000
+#define RAM_END 0x30000000
 
 #define RT_HW_HEAP_BEGIN    ((void *)&__bss_end)
 #define RT_HW_HEAP_END ((void *)(((rt_size_t)RT_HW_HEAP_BEGIN) + 0x2000000 ))
