@@ -97,13 +97,13 @@ jobs:
             src/little/buildroot-ext/package/tuning-server
           key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
-      - name: Prepare toolchain & sources
-        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
-        run: make prepare_sourcecode CONF=${{ matrix.conf }}
-
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
         run: mkdir -p toolchain && touch toolchain/.toolchain_ready
+
+      - name: Prepare toolchain & sources
+        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
+        run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
@@ -178,13 +178,13 @@ jobs:
             src/little/buildroot-ext/package/tuning-server
           key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
-      - name: Prepare toolchain & sources
-        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
-        run: make prepare_sourcecode CONF=${{ matrix.conf }}
-
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
         run: mkdir -p toolchain && touch toolchain/.toolchain_ready
+
+      - name: Prepare toolchain & sources
+        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
+        run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
@@ -283,13 +283,13 @@ jobs:
             src/little/buildroot-ext/package/tuning-server
           key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
 
-      - name: Prepare toolchain & sources
-        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
-        run: make prepare_sourcecode CONF=${{ matrix.conf }}
-
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
         run: mkdir -p toolchain && touch toolchain/.toolchain_ready
+
+      - name: Prepare toolchain & sources
+        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
+        run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
