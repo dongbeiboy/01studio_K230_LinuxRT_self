@@ -120,12 +120,12 @@ jobs:
           path: output/${{ matrix.conf }}/big/
           retention-days: 1
 
-  # ── 小核：Linux / U-Boot / Buildroot / Little-core OpenSBI ──
+  # ── 小核：Linux + U-Boot + little-core OpenSBI ──
   build-little:
     name: "Little ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -183,11 +183,87 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
 
-      - name: Build little core (Linux + U-Boot + Buildroot + OpenSBI)
+      - name: Build Linux + U-Boot + little-core OpenSBI
+        run: make CONF=${{ matrix.conf }} linux uboot little-core-opensbi
+        env:
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        timeout-minutes: 80
+
+      - name: Upload linux/uboot/opensbi outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.conf }}-little
+          path: |
+            output/${{ matrix.conf }}/little/
+            output/${{ matrix.conf }}/common/
+          retention-days: 1
+
+  # ── rootfs：Buildroot（独立并行） ──
+  build-rootfs:
+    name: "RootFS ${{ matrix.conf }}"
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        conf:
+          - k230_canmv_01studio_defconfig
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake flex bison m4 fakeroot attr zlib1g-dev \
+            bc cpio unzip rsync file make binutils build-essential \
+            gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
+            autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
+            libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
+            python3 python3-pip python-is-python3 scons wget curl
+          pip3 install pycryptodome gmssl
+
+      - name: Restore toolchain cache
+        id: cache-tc
+        uses: actions/cache@v4
+        with:
+          path: toolchain
+          key: toolchain-${{ hashFiles('Makefile') }}-v2
+
+      - name: Restore source cache
+        id: cache-src
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/.src_fetched
+            src/big/utils
+            src/big/ai
+            src/big/kmodel
+            src/big/nncase
+            src/little/utils/firmware
+            src/little/buildroot-ext/dl
+            src/little/buildroot-ext/package/tuning-server
+          key: sources-${{ hashFiles('Makefile') }}-v2
+
+      - name: Prepare toolchain & sources
+        if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
+        run: make prepare_sourcecode CONF=${{ matrix.conf }}
+
+      - name: Mark toolchain ready (cache hit)
+        if: steps.cache-tc.outputs.cache-hit == 'true'
+        run: mkdir -p toolchain && touch toolchain/.toolchain_ready
+
+      - name: Link toolchain to /opt/toolchain
+        run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+
+      - name: Build buildroot (with host-m4 + host-fakeroot glibc 2.35 patches)
         run: |
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
-          # Patch host-m4 (glibc 2.35: SIGSTKSZ not constant)
-          # Patch host-fakeroot (glibc 2.33+: _STAT_VER removed; 2.35: __xmknod renamed)
           patch_m4() {
             if [ -f "$OUT/host-m4-1.4.18/lib/c-stack.c" ]; then
               sed -i 's|#elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384|#elif 0|' "$OUT/host-m4-1.4.18/lib/c-stack.c"
@@ -202,48 +278,42 @@ jobs:
               echo "✅ patched host-fakeroot (_STAT_VER + __xmknod)"
             fi
           }
-          echo "Round 1: triggering buildroot (will fail at host-m4)..."
+          echo "Round 1 → host-m4 extract & fail"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
-          patch_m4
-          patch_fakeroot
-          echo "Round 2: retry buildroot (may fail at host-fakeroot)..."
+          patch_m4; patch_fakeroot
+          echo "Round 2 → host-fakeroot extract & fail"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
-          patch_m4
-          patch_fakeroot
-          echo "Round 3: final build..."
-          make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi 2>&1 || true
-          # buildroot cpio step fails in CI because mknod not allowed.
-          # The generated fakeroot script creates /dev nodes; patch it to skip mknod,
-          # then run it manually (gen_image.sh creates its own device nodes later).
+          patch_m4; patch_fakeroot
+          echo "Round 3 → final buildroot"
+          make CONF=${{ matrix.conf }} buildroot 2>&1 || true
+          # Fix cpio mknod (GitHub Actions runner lacks CAP_MKNOD)
           CPIO_STAMP="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
           FAKEROOT_SCRIPT="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FAKEROOT_SCRIPT" ] && [ ! -f "$CPIO_STAMP" ]; then
-            echo "🔧 Patching cpio fakeroot script (disable mknod)..."
+            echo "🔧 Patching cpio fakeroot script (skip mknod)..."
             sed -i 's/^\(.*mknod \)/echo \[CI-SKIP\] \1/' "$FAKEROOT_SCRIPT"
             HOST_BIN="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
-            PATH="$HOST_BIN:$HOST_BIN/../sbin:$PATH" \
-              bash "$FAKEROOT_SCRIPT" && touch "$CPIO_STAMP" && echo "✅ cpio done"
-            # now retry the rest (linux, uboot, opensbi were already built)
-            make CONF=${{ matrix.conf }} buildroot little-core-opensbi 2>&1 || true
+            PATH="$HOST_BIN:$HOST_BIN/../sbin:$PATH" bash "$FAKEROOT_SCRIPT" && touch "$CPIO_STAMP"
+            echo "✅ cpio done — retrying buildroot to finalize"
+            make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           fi
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        timeout-minutes: 150
+        timeout-minutes: 80
 
-      - name: Upload little core outputs
+      - name: Upload buildroot outputs
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.conf }}-little
+          name: ${{ matrix.conf }}-rootfs
           path: |
-            output/${{ matrix.conf }}/little/
-            output/${{ matrix.conf }}/common/
+            output/${{ matrix.conf }}/little/buildroot-ext/
           retention-days: 1
 
-  # ── 合并：下载大核+小核产物 → 打包镜像 ──
+  # ── 合并 ──
   merge:
     name: "Merge ${{ matrix.conf }}"
     if: github.ref_type == 'tag'
-    needs: [build-big, build-little]
+    needs: [build-big, build-little, build-rootfs]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
@@ -294,6 +364,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.conf }}-little
+          path: output/${{ matrix.conf }}/
+
+      - name: Download rootfs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.conf }}-rootfs
           path: output/${{ matrix.conf }}/
 
       - name: Build image
