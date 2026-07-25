@@ -266,16 +266,17 @@ gen_linux_bin ()
 	rm -rf rd;
 }
 
-#生成ext2 格式镜像；
+#生成ext4 格式镜像（默认 128M，A/B 模式 256M）
 gen_final_ext2 ()
 {
 	local mkfs="${BUILDROOT_BUILD_DIR}/host/sbin/mkfs.ext4"
+	local size="${1:-128M}"
 	cd  "${BUILD_DIR}/images/little-core/" ;
 	rm -rf rootfs.ext*
 	rm -rf rootfs/dev/console
 	rm -rf rootfs/dev/null
 
-	fakeroot ${mkfs} -d rootfs  -r 1 -N 0 -m 1 -L "rootfs" -O ^64bit rootfs.ext4 128M
+	fakeroot ${mkfs} -d rootfs  -r 1 -N 0 -m 1 -L "rootfs" -O ^64bit rootfs.ext4 ${size}
 }
 
 
@@ -523,6 +524,47 @@ gen_env_bin()
 	${mkenvimage} -s 0x10000 -o little-core/uboot/jffs2.env ${jffs2_env_file}
 	${mkenvimage} -s 0x10000 -o little-core/uboot/spinand.env ${spinand_env_file}
 	${mkenvimage} -s 0x10000 -o little-core/uboot/env.env  ${default_env_file}
+}
+
+# A/B 升级: 生成单 64K env（与 gen_env_bin 相同，冗余副本计划 P2）
+gen_env_bin_ab()
+{
+	local mkenvimage="${UBOOT_BUILD_DIR}/tools/mkenvimage"
+	cd  "${BUILD_DIR}/images/";
+	local default_env_file=${env_dir}/default.env;
+	local jffs2_env_file=${env_dir}/spinor.jffs2.env;
+	local spinand_env_file=${env_dir}/spinand.env;
+
+	sed -i -e "/^quick_boot/d"  ${jffs2_env_file}
+	sed -i -e "/quick_boot/d"  ${spinand_env_file}
+	sed -i -e "/^quick_boot/d"  ${default_env_file}
+	sed -i -e "/restore_img/d"  ${default_env_file}
+
+	if [ "${CONFIG_QUICK_BOOT}" != "y" ] || [ "${CONFIG_REMOTE_TEST_PLATFORM}" = "y" ] ; then
+		echo "quick_boot=false" >> ${jffs2_env_file}
+		echo "quick_boot=false" >> ${spinand_env_file}
+		echo "quick_boot=false" >> ${default_env_file}
+	fi
+	if [ "${CONFIG_REMOTE_TEST_PLATFORM}" = "y" ] ; then
+		echo "restore_img=mmc dev 0; mmc read 0x10000 0x200000 0x40000; gzwrite mmc 1 0x10000 0x8000000; reset" >> ${default_env_file}
+	fi
+
+	${mkenvimage} -s 0x10000 -o little-core/uboot/jffs2.env ${jffs2_env_file}
+	${mkenvimage} -s 0x10000 -o little-core/uboot/spinand.env ${spinand_env_file}
+	${mkenvimage} -s 0x10000 -o little-core/uboot/env.env  ${default_env_file}
+}
+gen_app_vfat()
+{
+	cd  ${BUILD_DIR}/images/
+	rm -f  app.vfat
+	dd if=/dev/zero of=app.vfat bs=1M count=256 2>/dev/null
+	mkdosfs -F 32 -n K230_APP app.vfat 2>/dev/null
+	VMT=$(mktemp -d)
+	mount -t vfat -o loop app.vfat $VMT
+	cp -a big-core/app/* $VMT/
+	sync && umount $VMT && rmdir $VMT
+	echo "app.vfat: $(ls -lh app.vfat | awk "{print $5}")"
+	cd -
 }
 copy_app()
 {

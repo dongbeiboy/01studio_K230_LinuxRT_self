@@ -95,8 +95,23 @@ typedef enum _en___boot_type{
 #define HD_BLK_NUM   DIV_ROUND_UP(sizeof(firmware_head_s), BLKSZ)
 
 #define UBOOT_SYS_IN_IMG_OFF_SEC    (2*1024*1024/BLKSZ)
-#define RTT_SYS_IN_IMG_OFF_SEC      (10*1024*1024/BLKSZ)
-#define LINUX_SYS_IN_IMG_OFF_SEC    (30*1024*1024/BLKSZ)
+
+/*
+ * A/B 分区槽位偏移（自动生成于 partition_layout.sh）
+ * Slot A — 向后兼容现有布局
+ * Slot B — 升级槽位
+ */
+#define SLOT_A_RTT_SEC     (10*1024*1024/BLKSZ)
+#define SLOT_A_LINUX_SEC   (30*1024*1024/BLKSZ)
+#define SLOT_B_RTT_SEC     (384*1024*1024/BLKSZ)
+#define SLOT_B_LINUX_SEC   (404*1024*1024/BLKSZ)
+
+/* 兼容旧名 */
+#define RTT_SYS_IN_IMG_OFF_SEC    SLOT_A_RTT_SEC
+#define LINUX_SYS_IN_IMG_OFF_SEC  SLOT_A_LINUX_SEC
+
+/* Env: 单副本 64K @ 0x1e0000（冗余副本计划 P2） */
+/* CONFIG_ENV_SIZE=0x10000 和 CONFIG_ENV_OFFSET=0x1e0000 在 defconfig 中定义 */
 
 #define UBOOT_SYS_IN_SPI_NOR_OFF    0x80000
 #define RTT_SYS_IN_SPI_NOR_OFF   CONFIG_SPI_NOR_RTTK_BASE

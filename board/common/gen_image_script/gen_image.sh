@@ -8,6 +8,7 @@ env_dir="${K230_SDK_ROOT}/board/common/env"
 
 GENIMAGE_CFG_DIR="${K230_SDK_ROOT}/board/common/gen_image_cfg"
 GENIMAGE_CFG_SD="${GENIMAGE_CFG_DIR}/genimage-sdcard.cfg"
+GENIMAGE_CFG_SD_AB="${GENIMAGE_CFG_DIR}/genimage-sdcard-ab.cfg"
 GENIMAGE_CFG_SD_AES="${GENIMAGE_CFG_DIR}/genimage-sdcard_aes.cfg"
 GENIMAGE_CFG_SD_SM="${GENIMAGE_CFG_DIR}/genimage-sdcard_sm.cfg"
 #GENIMAGE_CFG_SD_DDR4="${GENIMAGE_CFG_DIR}/genimage-sdcard_ddr4.cfg"
@@ -32,12 +33,31 @@ if [ "${CONFIG_SUPPORT_LINUX}" = "y" ]; then
 fi
 [ "${CONFIG_SUPPORT_RTSMART}" = "y" ] &&  gen_rtt_bin;
 gen_uboot_bin;
-gen_env_bin;
+if [ "${BUILD_AB_IMAGE}" = "1" ] ; then
+	gen_env_bin_ab
+else
+	gen_env_bin
+fi
 copy_app;
 
 if [ "${CONFIG_REMOTE_TEST_PLATFORM}" = "y" ] ; then
 	gen_image ${GENIMAGE_CFG_SD_REMOTE}   sysimage-sdcard.img
+elif [ "${BUILD_AB_IMAGE}" = "1" ] ; then
+	# === A/B 升级镜像 ===
+	gen_final_ext2 256M       # rootfs 扩容到 256M（覆盖上面的 128M）
+	gen_app_vfat
+	gen_image ${GENIMAGE_CFG_SD_AB}  sysimage-sdcard-ab.img
+	# 构建后校验
+	MIN_SIZE=$((1014 * 1024 * 1024))
+	ACTUAL_SIZE=$(stat -c %s "${BUILD_DIR}/images/sysimage-sdcard-ab.img")
+	if [ "$ACTUAL_SIZE" -lt "$MIN_SIZE" ]; then
+		echo "ERROR: AB image too small: $ACTUAL_SIZE < $MIN_SIZE (expected >=1014MB)"
+		exit 1
+	fi
+	echo "AB build OK: $(ls -lh "${BUILD_DIR}/images/sysimage-sdcard-ab.img")"
 else
+	# === 标准烧录镜像（仅 Slot A） ===
+	gen_app_vfat
 	gen_image ${GENIMAGE_CFG_SD}   sysimage-sdcard.img
 fi
 
@@ -57,7 +77,7 @@ fi
 
 
 cd  ${BUILD_DIR}/images/
-rm -rf  sysimage-sdcard_aes.img  sysimage-sdcard_sm.img  *.vfat
+rm -rf  sysimage-sdcard_aes.img  sysimage-sdcard_sm.img
 
 
 

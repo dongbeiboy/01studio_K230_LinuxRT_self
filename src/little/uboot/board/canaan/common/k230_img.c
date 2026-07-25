@@ -52,6 +52,82 @@
 #include <linux/mtd/mtd.h>
 #include "sdk_autoconf.h"
 #include <linux/delay.h>
+#include <env.h>
+
+/* ============================================================
+ * A/B 升级: attempt 计数与槽位切换
+ * ============================================================
+ * boot_slot           — 当前启动槽位 "a" 或 "b"
+ * boot_slot_a_attempt — Slot A 剩余尝试次数 (默认 3)
+ * boot_slot_b_attempt — Slot B 剩余尝试次数 (默认 3)
+ * boot_attempt_max    — 最大尝试次数
+ *
+ * 流程:
+ *   1. boot_slot 不存在 → 正常引导（全新烧录，不碰 attempt）
+ *   2. boot_slot 存在, attempt > 0 → 减 attempt, 引导当前槽
+ *   3. boot_slot 存在, attempt = 0 → 若另一槽 attempt > 0, 切过去; 否则 rescue
+ *   4. 加载失败(magic/gzip 错) → 直接清零 attempt, 重启
+ * ============================================================ */
+#ifndef CONFIG_AB_SLOT_MAX_ATTEMPT
+#define CONFIG_AB_SLOT_MAX_ATTEMPT  3
+#endif
+
+#ifndef CONFIG_SPL_BUILD
+static int k230_ab_handle_slot(void)
+{
+    char *slot = env_get("boot_slot");
+    char *attempt_var;
+    char *other_var;
+    const char *other_slot;
+    ulong attempt, other;
+
+    /* 全新烧录: boot_slot 不存在 → 正常引导, 不碰 attempt */
+    if (!slot || (slot[0] != 'a' && slot[0] != 'b')) {
+        printf("AB: no valid boot_slot, booting default (slot A)\n");
+        return 0;
+    }
+
+    if (slot[0] == 'a') {
+        attempt_var = "boot_slot_a_attempt";
+        other_var   = "boot_slot_b_attempt";
+        other_slot  = "b";
+    } else {
+        attempt_var = "boot_slot_b_attempt";
+        other_var   = "boot_slot_a_attempt";
+        other_slot  = "a";
+    }
+
+    attempt = env_get_ulong(attempt_var, 10, 0);
+    other   = env_get_ulong(other_var, 10, 0);
+
+    printf("AB: slot=%s attempt=%lu other_slot=%s other=%lu\n",
+           slot, attempt, other_slot, other);
+
+    if (attempt <= 0) {
+        /* 当前槽耗尽, 尝试切到另一槽 */
+        if (other > 0) {
+            printf("AB: slot %s exhausted, switching to %s\n", slot, other_slot);
+            env_set("boot_slot", other_slot);
+            env_save();
+            do_reset(NULL, 0, 0, NULL);
+            /* never reached */
+        } else {
+            /* 双槽都耗尽 → rescue */
+            printf("AB: both slots exhausted, entering rescue\n");
+            run_command("run bootcmd_rescue", 0);
+            /* never reached */
+        }
+    }
+
+    /* 正常: 减 attempt */
+    attempt--;
+    env_set_ulong(attempt_var, attempt);
+    env_set("boot_slot", slot); /* 确保 boot_slot 存在 */
+    env_save();
+    printf("AB: slot=%s attempt now %lu\n", slot, attempt);
+    return 0;
+}
+#endif /* !CONFIG_SPL_BUILD */
 
 static int k230_check_and_get_plain_data(firmware_head_s *pfh, ulong *pplain_addr);
 static int k230_boot_rtt_uimage(image_header_t *pUh);
@@ -110,9 +186,9 @@ char *board_fdt_chosen_bootargs(void){
         if((bootargs = fdt_chosen_bootargs())!=NULL)
             return bootargs;
         if(g_bootmod == SYSCTL_BOOT_SDIO0)
-            bootargs = "root=/dev/mmcblk0p3 loglevel=8 rw rootdelay=4 rootfstype=ext4 console=ttyS0,115200 crashkernel=256M-:128M earlycon=sbi";
+            bootargs = "root=/dev/mmcblk0p1 loglevel=4 rw rootdelay=4 rootfstype=ext4 console=tty0 console=ttyS0,115200 crashkernel=256M-:128M earlycon=sbi";
         else if(g_bootmod == SYSCTL_BOOT_SDIO1)
-            bootargs = "root=/dev/mmcblk1p3 loglevel=8 rw rootdelay=4 rootfstype=ext4 console=ttyS0,115200 crashkernel=256M-:128M earlycon=sbi";
+            bootargs = "root=/dev/mmcblk1p1 loglevel=4 rw rootdelay=4 rootfstype=ext4 console=tty0 console=ttyS0,115200 crashkernel=256M-:128M earlycon=sbi";
         else  if(g_bootmod == SYSCTL_BOOT_NORFLASH)
             //bootargs = "root=/dev/mtdblock9 rw rootwait rootfstype=jffs2 console=ttyS0,115200 earlycon=sbi";
             //bootargs = "ubi.mtd=9 rootfstype=ubifs rw root=ubi0_0 console=ttyS0,115200 earlycon=sbi";
@@ -220,7 +296,7 @@ static int k230_boot_linux_uimage(image_header_t *pUh)
         if(rd_len > 0x100 )
             memmove((void*)RAMDISK_ADDR, (void *)rd, rd_len);
 
-        K230_dbg("dtb %lx rd=%lx l=%lx  %lx %lx ci%lx %lx \n", dtb,rd, data, OPENSBI_DTB_ADDR, RAMDISK_ADDR, get_CONFIG_CIPHER_ADDR(),get_CONFIG_PLAIN_ADDR());
+        K230_dbg("dtb %lx rd=%lx l=%lx  %lx %lx ci%lx %lx \n", (ulong)dtb,(ulong)rd, (ulong)data, (ulong)OPENSBI_DTB_ADDR, (ulong)RAMDISK_ADDR, (ulong)get_CONFIG_CIPHER_ADDR(),(ulong)get_CONFIG_PLAIN_ADDR());
 
         cleanup_before_linux();//flush cache，
         kernel = (void (*)(ulong, void *))img_load_addr;
@@ -492,20 +568,31 @@ static int k230_check_and_get_plain_data(firmware_head_s *pfh, ulong *pplain_add
 #ifdef SUPPORT_MMC_LOAD_BOOT
 __weak ulong get_blk_start_by_boot_firmre_type(en_boot_sys_t sys)
 {
-    ulong blk_s = IMG_PART_NOT_EXIT;
+#ifndef CONFIG_SPL_BUILD
+    char *slot = env_get("boot_slot");
+    int use_b = (slot && slot[0] == 'b');
+
     switch (sys){
-	case BOOT_SYS_LINUX:
-		blk_s = LINUX_SYS_IN_IMG_OFF_SEC;
-		break;
-	case BOOT_SYS_RTT:
-		blk_s = RTT_SYS_IN_IMG_OFF_SEC;
-		break;
+    case BOOT_SYS_LINUX:
+        return use_b ? SLOT_B_LINUX_SEC : SLOT_A_LINUX_SEC;
+    case BOOT_SYS_RTT:
+        return use_b ? SLOT_B_RTT_SEC : SLOT_A_RTT_SEC;
     case BOOT_SYS_UBOOT:
-		blk_s = UBOOT_SYS_IN_IMG_OFF_SEC;
-		break;
-    default:break;
-	} 
-    return blk_s;
+        return UBOOT_SYS_IN_IMG_OFF_SEC;
+    default:
+        break;
+    }
+    return IMG_PART_NOT_EXIT;
+#else
+    /* SPL: 只加载 U-Boot，不需 A/B */
+    switch (sys){
+    case BOOT_SYS_UBOOT:
+        return UBOOT_SYS_IN_IMG_OFF_SEC;
+    default:
+        break;
+    }
+    return IMG_PART_NOT_EXIT;
+#endif
 }
 
 //dev ,linux ,buff
@@ -794,12 +881,15 @@ __weak int k230_img_load_boot_sys_auot_boot(en_boot_sys_t sys)
     k230_img_load_boot_sys(BOOT_RTAPP);
     #endif 
 
+    /* A/B: 选槽 + attempt 管理 (仅完整 U-Boot，非 SPL) */
+#ifndef CONFIG_SPL_BUILD
+    k230_ab_handle_slot();
+#endif
 
     #if  defined(CONFIG_SUPPORT_RTSMART)
-    ret += k230_img_load_boot_sys(BOOT_SYS_RTT); 
+    ret += k230_img_load_boot_sys(BOOT_SYS_RTT);
     #endif  
 
-    
     #if  defined(CONFIG_SUPPORT_RTSMART) && !defined(CONFIG_SUPPORT_LINUX)
     if(ret == 0)
     {
@@ -810,12 +900,24 @@ __weak int k230_img_load_boot_sys_auot_boot(en_boot_sys_t sys)
     }
     #endif 
 
-
-
     #if  defined(CONFIG_SUPPORT_LINUX)
     ret += k230_img_load_boot_sys(BOOT_SYS_LINUX);
     #endif 
-    
+
+    /* 加载失败 → 清零 attempt（U-Boot 将 reset 或进入 rescue） */
+#ifndef CONFIG_SPL_BUILD
+    if (ret != 0) {
+        char *slot = env_get("boot_slot");
+        if (slot && (slot[0] == 'a' || slot[0] == 'b')) {
+            char var[32];
+            snprintf(var, sizeof(var), "boot_slot_%c_attempt", slot[0]);
+            env_set_ulong(var, 0);
+            env_save();
+            printf("AB: load failed, zeroed %s → will try other slot or rescue\n", var);
+        }
+    }
+#endif
+
     return ret;
 }
 /**

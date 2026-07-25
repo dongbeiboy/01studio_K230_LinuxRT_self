@@ -42,10 +42,10 @@
 #endif
 
 #define CONFIG_EXTRA_ENV_SETTINGS \
-	"dtb_addr=0xa000000 \0" \
-	"fdt_high=0xa100000\0" \
-	"kernel_addr=0xc100000\0" \
-	"ramdisk_addr=0xa100000\0" \
+	"dtb_addr=0x32000000 \0" \
+	"fdt_high=0x32100000\0" \
+	"kernel_addr=0x34100000\0" \
+	"ramdisk_addr=0x32100000\0" \
 	"ipaddr=10.99.105.44\0" \
 	"serverip=10.10.1.94\0" \
 	"gatewayip=10.99.105.254\0" \
