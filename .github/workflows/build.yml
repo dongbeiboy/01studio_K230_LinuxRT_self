@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -95,7 +95,7 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -161,7 +161,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -176,7 +176,7 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -266,7 +266,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -281,7 +281,7 @@ jobs:
             src/little/utils/firmware
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
-          key: sources-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -423,7 +423,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v3
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
 
       - name: Link toolchain to /opt/toolchain
         run: |
@@ -446,7 +446,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.conf }}-rootfs
-          path: output/${{ matrix.conf }}/
+          path: output/${{ matrix.conf }}/little/buildroot-ext/
 
       - name: Build image
         run: |
