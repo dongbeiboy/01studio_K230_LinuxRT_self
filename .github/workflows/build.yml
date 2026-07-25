@@ -438,9 +438,11 @@ jobs:
       - name: Build image
         run: |
           mkdir -p output/${{ matrix.conf }}/images
-          make CONF=${{ matrix.conf }} build-image
-        env:
-          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          cp configs/${{ matrix.conf }} .config
+          echo "CONF=${{ matrix.conf }}" > .last_conf
+          export K230_SDK_ROOT="$(pwd)"
+          export BUILD_DIR="$(pwd)/output/${{ matrix.conf }}"
+          bash board/common/gen_image_script/gen_image.sh
 
       - name: Package release
         run: |
