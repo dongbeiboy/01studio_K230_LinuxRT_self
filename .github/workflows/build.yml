@@ -300,15 +300,18 @@ jobs:
           # ── 辅助函数 ──
           patch_m4() {
             local f="$OUT/host-m4-1.4.18/lib/c-stack.c"
-            [ -f "$f" ] && sed -i 's|#elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384|#elif 0|' "$f" \
-              && echo "✅ patched host-m4 c-stack.c" || echo "  host-m4 not yet extracted"
+            if [ -f "$f" ]; then
+              sed -i 's|# *if.*SIGSTKSZ *< *16384|#if 0 /* CI: SIGSTKSZ not constant */|' "$f"
+              sed -i 's|# *elif.*SIGSTKSZ *< *16384|#elif 0 /* CI: SIGSTKSZ not constant */|' "$f"
+              echo "✅ patched host-m4 c-stack.c"
+            else echo "  host-m4 not yet extracted"; fi
           }
           patch_fakeroot() {
             local f1="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
             local f2="$OUT/host-fakeroot-1.25.3/config.h"
             if [ -f "$f1" ]; then
               head -1 "$f1" | grep -q "_STAT_VER" || sed -i '1i#define _STAT_VER 1' "$f1"
-              [ -f "$f2" ] && sed -i 's/#define WRAP_MKNOD __xmknod$/#define WRAP_MKNOD __xmknod_old/' "$f2" 2>/dev/null
+              [ -f "$f2" ] && sed -i 's/^#define WRAP_MKNOD.*/#define WRAP_MKNOD __xmknod_old/' "$f2"
               echo "✅ patched host-fakeroot (_STAT_VER + __xmknod)"
             else echo "  host-fakeroot not yet extracted"; return 1; fi
           }
@@ -352,6 +355,15 @@ jobs:
           fi
           # ── Round 3: buildroot-rebuild（增量，比完整 buildroot 快很多） ──
           echo "═══ Round 3: buildroot-rebuild ═══"
+          # Stub makedevs: GitHub runner 无 CAP_MKNOD，makedevs 创建设备节
+点会失败
+          MB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin/makedevs"
+          if [ -f "$MB" ] && ! head -1 "$MB" | grep -q '\[CI-NOOP\]'; then
+            mv "$MB" "$MB.real"
+            printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$MB"
+            chmod +x "$MB"
+            echo "✅ stubbed makedevs (no CAP_MKNOD)"
+          fi
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || \
             { echo "⚠️ rebuild failed → fallback full buildroot"; \
               make CONF=${{ matrix.conf }} buildroot 2>&1 || \
