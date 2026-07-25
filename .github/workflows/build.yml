@@ -227,7 +227,6 @@ jobs:
           name: ${{ matrix.conf }}-little
           path: |
             output/${{ matrix.conf }}/little/
-            output/${{ matrix.conf }}/common/
           retention-days: 1
 
   # ── rootfs：Buildroot（独立并行） ──
@@ -411,10 +410,23 @@ jobs:
           cd /tmp && tar -xf genimage.tar.xz
           cd genimage-16 && ./configure && make -j"$(nproc)" && sudo make install
 
+      - name: Restore source cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            src/.src_fetched
+            src/big/utils
+            src/big/ai
+            src/big/kmodel
+            src/big/nncase
+            src/little/utils/firmware
+            src/little/buildroot-ext/dl
+            src/little/buildroot-ext/package/tuning-server
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+
       - name: Prepare output structure
         run: |
           mkdir -p output/${{ matrix.conf }}/images
-          touch src/.src_fetched
           make CONF=${{ matrix.conf }} prepare_memory
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
