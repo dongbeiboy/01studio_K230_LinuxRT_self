@@ -355,8 +355,7 @@ jobs:
           fi
           # ── Round 3: buildroot-rebuild（增量，比完整 buildroot 快很多） ──
           echo "═══ Round 3: buildroot-rebuild ═══"
-          # Stub makedevs: GitHub runner 无 CAP_MKNOD，makedevs 创建设备节
-点会失败
+          # Stub makedevs (GitHub runner 无 CAP_MKNOD)
           MB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin/makedevs"
           if [ -f "$MB" ] && ! head -1 "$MB" | grep -q '\[CI-NOOP\]'; then
             mv "$MB" "$MB.real"
