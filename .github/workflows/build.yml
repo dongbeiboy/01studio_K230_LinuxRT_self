@@ -188,25 +188,33 @@ jobs:
 
       - name: Build little core (Linux + U-Boot + Buildroot + OpenSBI)
         run: |
-          errors=0
-          make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi 2>&1 || errors=$?
-          if [ "$errors" -ne 0 ]; then
-            echo "⚠️  First build failed (expected: host-m4 glibc 2.35 issue). Applying patches..."
-            # Fix host-m4: glibc 2.35 removed SIGSTKSZ constant
-            M4_DIR="output/${{ matrix.conf }}/little/buildroot-ext/build/host-m4-1.4.18"
-            if [ -f "$M4_DIR/lib/c-stack.c" ]; then
-              sed -i 's|#elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384|#elif 0|' "$M4_DIR/lib/c-stack.c"
+          OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
+          # Patch host-m4 (glibc 2.35: SIGSTKSZ not constant)
+          # Patch host-fakeroot (glibc 2.33+: _STAT_VER removed; 2.35: __xmknod renamed)
+          patch_m4() {
+            if [ -f "$OUT/host-m4-1.4.18/lib/c-stack.c" ]; then
+              sed -i 's|#elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384|#elif 0|' "$OUT/host-m4-1.4.18/lib/c-stack.c"
               echo "✅ patched host-m4 c-stack.c"
             fi
-            # Fix host-fakeroot: glibc 2.35 renamed __xmknod → __xmknod_old
-            FAKEROOT_DIR="output/${{ matrix.conf }}/little/buildroot-ext/build/host-fakeroot-1.25.3"
-            if [ -f "$FAKEROOT_DIR/config.h" ]; then
-              sed -i 's/#define WRAP_MKNOD __xmknod$/#define WRAP_MKNOD __xmknod_old/' "$FAKEROOT_DIR/config.h"
-              echo "✅ patched host-fakeroot config.h"
+          }
+          patch_fakeroot() {
+            if [ -f "$OUT/host-fakeroot-1.25.3/libfakeroot.c" ]; then
+              head -1 "$OUT/host-fakeroot-1.25.3/libfakeroot.c" | grep -q "_STAT_VER" || \
+                sed -i '1i#define _STAT_VER 1' "$OUT/host-fakeroot-1.25.3/libfakeroot.c"
+              sed -i 's/#define WRAP_MKNOD __xmknod$/#define WRAP_MKNOD __xmknod_old/' "$OUT/host-fakeroot-1.25.3/config.h" 2>/dev/null || true
+              echo "✅ patched host-fakeroot (_STAT_VER + __xmknod)"
             fi
-            echo "🔁 Retrying full build..."
-            make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
-          fi
+          }
+          echo "Round 1: triggering buildroot (will fail at host-m4)..."
+          make CONF=${{ matrix.conf }} buildroot 2>&1 || true
+          patch_m4
+          patch_fakeroot
+          echo "Round 2: retry buildroot (may fail at host-fakeroot)..."
+          make CONF=${{ matrix.conf }} buildroot 2>&1 || true
+          patch_m4
+          patch_fakeroot
+          echo "Round 3: final build..."
+          make CONF=${{ matrix.conf }} linux uboot buildroot little-core-opensbi
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
