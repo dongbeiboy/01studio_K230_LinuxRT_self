@@ -397,6 +397,14 @@ jobs:
             PATH="$FB:$FB/../sbin:/usr/bin:$PATH" bash "$FSCR" && touch "$IMGDIR/rootfs.cpio" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
+          # ── 压缩 ext2 到实际最小尺寸（预分配 500M → 实际 ~50M）──
+          EXT2="$IMGDIR/rootfs.ext2"
+          if [ -f "$EXT2" ]; then
+            sudo apt-get install -y -qq e2fsprogs 2>/dev/null || true
+            sudo e2fsck -fy "$EXT2" 2>/dev/null || true
+            sudo resize2fs -M "$EXT2"
+            echo "✅ ext2 shrunk to $(du -h "$EXT2" | cut -f1)"
+          fi
           # ── 最终校验：images/ 必须非空 ──
           echo "=== buildroot images ==="
           ls -la "$IMGDIR/" || { echo "❌ images/ missing"; exit 1; }
