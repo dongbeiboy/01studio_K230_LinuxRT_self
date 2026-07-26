@@ -316,11 +316,14 @@ jobs:
           # ── 用系统 fakeroot 替换 buildroot 的（跳过 _STAT_VER / __xmknod 问题）──
           FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
           if [ -f /usr/bin/fakeroot ]; then
+            mkdir -p "$FB" "$FB/../lib"
             cp /usr/bin/fakeroot "$FB/fakeroot"
             cp /usr/bin/fakeroot-tcp "$FB/fakeroot-tcp" 2>/dev/null || true
             cp /usr/bin/faked "$FB/faked" 2>/dev/null || true
-            # 也复制 libfakeroot
             find /usr/lib -name "libfakeroot*.so*" -exec cp {} "$FB/../lib/" \; 2>/dev/null || true
+            # 打 stamp 让 buildroot 不再从源码编译 fakeroot
+            touch "$OUT/host-fakeroot-1.25.3/.stamp_built" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_installed" 2>/dev/null || true
             echo "✅ replaced with system fakeroot"
           fi
           # ── Stub makedevs (GitHub runner 无 CAP_MKNOD) ──
