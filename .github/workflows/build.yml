@@ -299,13 +299,13 @@ jobs:
 
       - name: Build buildroot
         run: |
-          # ── 安装系统 fakeroot（Ubuntu 22.04 自带 1.28，原生支持 glibc 2.35）──
-          sudo apt-get install -y -qq fakeroot
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
-          # ── Round 1: buildroot 全量跑一次（下载 + 解压 + 编译，会在某些地方失败）──
+          FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
+          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
+          # ── Round 1: buildroot 全量跑（下载+配置+编译，失败正常）──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
-          # ── Patch m4 (glibc 2.35 SIGSTKSZ 不是编译期常量) ──
+          # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
           M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
           if [ -f "$M4F" ]; then
             sed -i 's|# *if.*SIGSTKSZ *< *16384|#if 0 /* CI */|' "$M4F"
@@ -313,46 +313,37 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
-          # ── 用系统 fakeroot 替换 buildroot 的（跳过 _STAT_VER / __xmknod 问题）──
-          FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
-          if [ -f /usr/bin/fakeroot ]; then
-            mkdir -p "$FB" "$FB/../lib"
-            cp /usr/bin/fakeroot "$FB/fakeroot"
-            cp /usr/bin/fakeroot-tcp "$FB/fakeroot-tcp" 2>/dev/null || true
-            cp /usr/bin/faked "$FB/faked" 2>/dev/null || true
-            find /usr/lib -name "libfakeroot*.so*" -exec cp {} "$FB/../lib/" \; 2>/dev/null || true
-            # 打全部 stamp 让 buildroot 跳过 fakeroot 整条流水线
-            mkdir -p "$OUT/host-fakeroot-1.25.3"
-            touch "$OUT/host-fakeroot-1.25.3/.stamp_extracted" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_patched" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_configured" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_built" \
+          # ── Patch fakeroot _STAT_VER (glibc 2.35) ──
+          FK="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
+          FKCFG="$OUT/host-fakeroot-1.25.3/fakerootconfig.h"
+          if [ -f "$FK" ]; then
+            sed -i '1i#define _STAT_VER 1' "$FK"
+            [ -f "$FKCFG" ] && sed -i '/#define NEXT_STAT64\|#define NEXT_FSTATAT64/s/(VER)/(1)/' "$FKCFG"
+            rm -f "$OUT/host-fakeroot-1.25.3/.stamp_built" \
                   "$OUT/host-fakeroot-1.25.3/.stamp_installed"
-            echo "✅ replaced with system fakeroot"
+            echo "✅ patched fakeroot"
           fi
-          # ── Stub makedevs (GitHub runner 无 CAP_MKNOD) ──
+          # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs"; then
             mv "$FB/makedevs" "$FB/makedevs.real"
             printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
             chmod +x "$FB/makedevs"
             echo "✅ stubbed makedevs"
           fi
-          # ── 删除 cpio.mk 中的 mknod ──
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
-          # ── Round 2: 增量重编（m4 ✅, fakeroot ✅, makedevs ✅）──
+          # ── Round 2: 增量重编（m4 + fakeroot 已 patch，stamp 已删）──
           echo "═══ Round 2: rebuild ═══"
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
-          # ── 如果 cpio 失败，手动创建 rootfs.cpio ──
-          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
+          # ── 手动 cpio 修复 ──
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
-            echo "🔧 Manual cpio fix..."
+            echo "🔧 Manual cpio..."
             sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
             PATH="$FB:$FB/../sbin:/usr/bin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
-          # ── 最终校验 ──
+          # ── 校验 ──
           echo "=== buildroot images ==="
           ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
             { echo "❌ images/ missing"; exit 1; }
