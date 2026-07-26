@@ -273,7 +273,11 @@ jobs:
         with:
           name: ${{ matrix.conf }}-little
           path: |
-            output/${{ matrix.conf }}/little/
+            output/${{ matrix.conf }}/little/linux/arch/riscv/boot/Image
+            output/${{ matrix.conf }}/little/linux/rootfs/
+            output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc
+            output/${{ matrix.conf }}/little/uboot/tools/
+            output/${{ matrix.conf }}/common/little-opensbi/
           retention-days: 1
 
   # ── rootfs：Buildroot（独立并行） ──
@@ -490,7 +494,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.conf }}-little
-          path: output/${{ matrix.conf }}
+          path: .
 
       - name: Download rootfs artifact
         uses: actions/download-artifact@v4
