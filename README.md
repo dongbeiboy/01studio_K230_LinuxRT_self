@@ -1,5 +1,7 @@
 # 01Studio K230 Linux+RTOS SDK
 
+> ⚠️ **请注意：此项目由 AI 辅助开发，仅供学习使用，请不要用于生产用途** ⚠️
+
 基于 [kendryte/k230_sdk](https://github.com/kendryte/k230_sdk) 的定制分支，专为 **01Studio K230 CanMV** 开发板（2GB LPDDR4）优化，提供 Linux + RT-Smart 双核异构系统的完整软件开发包。
 
 [![Build & Release](https://github.com/dongbeiboy/01studio_K230_LinuxRT_self/actions/workflows/build.yml/badge.svg)](https://github.com/dongbeiboy/01studio_K230_LinuxRT_self/actions/workflows/build.yml)
@@ -73,7 +75,7 @@
 - WSL2 + Ubuntu 22.04 
 - 磁盘空间 ≥ 20GB
 
-### 一键编译（推荐在 WSL/原生 Linux 上裸编译）
+### 一键编译（推荐在 WSL/原生 Linux 上裸编译）（开发中）
 
 ```bash
 # 安装依赖（仅首次）
