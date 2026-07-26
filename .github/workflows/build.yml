@@ -321,9 +321,13 @@ jobs:
             cp /usr/bin/fakeroot-tcp "$FB/fakeroot-tcp" 2>/dev/null || true
             cp /usr/bin/faked "$FB/faked" 2>/dev/null || true
             find /usr/lib -name "libfakeroot*.so*" -exec cp {} "$FB/../lib/" \; 2>/dev/null || true
-            # 打 stamp 让 buildroot 不再从源码编译 fakeroot
-            touch "$OUT/host-fakeroot-1.25.3/.stamp_built" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_installed" 2>/dev/null || true
+            # 打全部 stamp 让 buildroot 跳过 fakeroot 整条流水线
+            mkdir -p "$OUT/host-fakeroot-1.25.3"
+            touch "$OUT/host-fakeroot-1.25.3/.stamp_extracted" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_patched" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_configured" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_built" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_installed"
             echo "✅ replaced with system fakeroot"
           fi
           # ── Stub makedevs (GitHub runner 无 CAP_MKNOD) ──
