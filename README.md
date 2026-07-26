@@ -345,6 +345,12 @@ genimage 的 mcopy 在 256MB VFAT 分区上可能失败，已改为手动 `mount
 
 ---
 
+## 已知问题
+
+- 屏幕不亮
+
+---
+
 ## License
 
 本项目沿用上游 [kendryte/k230_sdk](https://github.com/kendryte/k230_sdk) 的 LICENSE。详见 [LICENSE](./LICENSE) 文件。
