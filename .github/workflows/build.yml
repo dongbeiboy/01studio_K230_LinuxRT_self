@@ -268,16 +268,24 @@ jobs:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ matrix.conf }}-${{ github.run_id }}
 
-      - name: Upload linux/uboot/opensbi outputs
+      - name: Pack little outputs
+        run: |
+          rm -rf output/${{ matrix.conf }}/little/linux/rootfs/lib/modules/*/build \
+                 output/${{ matrix.conf }}/little/linux/rootfs/lib/modules/*/source \
+                 2>/dev/null || true
+          tar -czf little-out.tar.gz \
+            -C output \
+            ${{ matrix.conf }}/little/linux/arch/riscv/boot/Image \
+            ${{ matrix.conf }}/little/linux/rootfs/ \
+            ${{ matrix.conf }}/little/linux/scripts/dtc/dtc \
+            ${{ matrix.conf }}/little/uboot/tools/ \
+            ${{ matrix.conf }}/common/little-opensbi/
+
+      - name: Upload little outputs
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.conf }}-little
-          path: |
-            output/${{ matrix.conf }}/little/linux/arch/riscv/boot/Image
-            output/${{ matrix.conf }}/little/linux/rootfs/
-            output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc
-            output/${{ matrix.conf }}/little/uboot/tools/
-            output/${{ matrix.conf }}/common/little-opensbi/
+          path: little-out.tar.gz
           retention-days: 1
 
   # ── rootfs：Buildroot（独立并行） ──
@@ -495,6 +503,9 @@ jobs:
         with:
           name: ${{ matrix.conf }}-little
           path: .
+
+      - name: Extract little outputs
+        run: tar -xzf little-out.tar.gz
 
       - name: Download rootfs artifact
         uses: actions/download-artifact@v4
