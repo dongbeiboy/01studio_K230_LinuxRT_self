@@ -2,7 +2,7 @@
 
 > ⚠️ **请注意：此项目由 AI 辅助开发，仅供学习使用，请不要用于生产用途** ⚠️
 
-基于 [kendryte/k230_sdk](https://github.com/kendryte/k230_sdk) 的定制分支，专为 **01Studio K230 CanMV** 开发板（2GB LPDDR4）优化，提供 Linux + RT-Smart 双核异构系统的完整软件开发包。
+基于 [kendryte/k230_sdk](https://github.com/kendryte/k230_sdk) 的个人分支，专为 **01Studio K230 CanMV** 开发板（2GB LPDDR4）优化，更添加了A/B分区更新支持。
 
 [![Build & Release](https://github.com/dongbeiboy/01studio_K230_LinuxRT_self/actions/workflows/build.yml/badge.svg)](https://github.com/dongbeiboy/01studio_K230_LinuxRT_self/actions/workflows/build.yml)
 
