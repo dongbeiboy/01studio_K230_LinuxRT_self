@@ -366,7 +366,7 @@ jobs:
           FK_DIR="$OUT/host-fakeroot-1.25.3"
           mkdir -p "$FK_DIR"
           for stamp in downloaded extracted patched configured built stamped installed \
-                       staging_installed target_installed; do
+                       host_installed staging_installed target_installed; do
             touch "$FK_DIR/.stamp_$stamp"
           done
           # 拷贝系统 fakeroot 二进制到 buildroot 的 host/bin
