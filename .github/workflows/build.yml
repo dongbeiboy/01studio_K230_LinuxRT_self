@@ -274,12 +274,11 @@ jobs:
                  output/${{ matrix.conf }}/little/linux/rootfs/lib/modules/*/source \
                  2>/dev/null || true
           tar -czf little-out.tar.gz \
-            -C output \
-            ${{ matrix.conf }}/little/linux/arch/riscv/boot/Image \
-            ${{ matrix.conf }}/little/linux/rootfs/ \
-            ${{ matrix.conf }}/little/linux/scripts/dtc/dtc \
-            ${{ matrix.conf }}/little/uboot/tools/ \
-            ${{ matrix.conf }}/common/little-opensbi/
+            output/${{ matrix.conf }}/little/linux/arch/riscv/boot/Image \
+            output/${{ matrix.conf }}/little/linux/rootfs/ \
+            output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc \
+            output/${{ matrix.conf }}/little/uboot/tools/ \
+            output/${{ matrix.conf }}/common/little-opensbi/
 
       - name: Upload little outputs
         uses: actions/upload-artifact@v4
