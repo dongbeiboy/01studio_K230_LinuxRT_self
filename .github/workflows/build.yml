@@ -6,15 +6,51 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  # ════════════════════════════════════════════════════════════
+  # 手动触发器：免打 tag，按需选择组件
+  # ════════════════════════════════════════════════════════════
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: '选择 defconfig'
+        required: true
+        type: choice
+        default: 'k230_canmv_01studio_defconfig'
+        options:
+          - k230_canmv_01studio_defconfig
+      target:
+        description: '构建目标'
+        required: true
+        type: choice
+        default: 'full'
+        options:
+          - full       # 全量：大核+小核+rootfs+打包镜像+Release
+          - big        # 仅大核 (RTT+MPP)
+          - little     # 仅小核 (Linux+U-Boot)
+          - rootfs     # 仅 rootfs (Buildroot)
+          - pack       # 仅打包 (需下方填写 artifact 来源 run ID)
+      artifact_run_id:
+        description: '【仅 target=pack 需要】artifact 来源的 workflow run ID'
+        required: false
+        type: string
 
 env:
   BUILD_CONFS: |
     k230_canmv_01studio_defconfig
 
+# ════════════════════════════════════════════════════════════════
+# Tag 命名约定
+#   v*-full / 无特定后缀  → 全量并行构建 + 发布
+#   v*-big                → 仅大核 (RTT+MPP)
+#   v*-little             → 仅小核 (Linux+U-Boot)
+#   v*-rootfs             → 仅 rootfs (Buildroot)
+#   v*-pack               → 仅打包 (workflow_dispatch 更好用)
+# ════════════════════════════════════════════════════════════════
+
 jobs:
-  # ============================================================
-  # 轻量门禁：每次 push/PR 跑（不打 tag 时）
-  # ============================================================
+  # ──────────────────────────────────────────────────────────
+  # 轻量门禁：push/PR 每次必跑，0 成本
+  # ──────────────────────────────────────────────────────────
   check:
     name: Check
     if: github.event_name == 'pull_request' || github.ref_type == 'branch'
@@ -40,14 +76,22 @@ jobs:
             -not -path "*/tools/kconfig/*" \
             -exec shellcheck -S warning {} + 2>/dev/null || true
 
-  # ============================================================
-  # 全量编译（并行）：大核 + 小核 同时构建
-  # ============================================================
-
-  # ── 大核：RTT / MPP / Big-core OpenSBI ──
+  # ──────────────────────────────────────────────────────────
+  # 大核：RTT / MPP / Big-core OpenSBI
+  # 触发: tag *-full/*-big 或 dispatch target=full/big
+  # ──────────────────────────────────────────────────────────
   build-big:
     name: "大核 (RTT+MPP)  ${{ matrix.conf }}"
-    if: github.ref_type == 'tag'
+    if: |
+      (github.ref_type == 'tag' && (
+        contains(github.ref_name, '-big') ||
+        contains(github.ref_name, '-full') ||
+        !(contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
+      ))
+      ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.target == 'full' || github.event.inputs.target == 'big'
+      ))
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     strategy:
@@ -55,6 +99,9 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
+    env:
+      # dispatch 时用输入的 defconfig，tag 时用矩阵值
+      CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
 
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +127,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -96,7 +143,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -104,7 +151,7 @@ jobs:
 
       - name: Prepare toolchain & sources
         if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
-        run: make prepare_sourcecode CONF=${{ matrix.conf }}
+        run: make prepare_sourcecode CONF=${{ env.CONF }}
 
       - name: Link toolchain to /opt/toolchain
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
@@ -129,11 +176,11 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/.ccache-rtt
-          key: ccache-rtt-${{ matrix.conf }}-${{ github.run_id }}
-          restore-keys: ccache-rtt-${{ matrix.conf }}-
+          key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
+          restore-keys: ccache-rtt-${{ env.CONF }}-
 
       - name: Build big core (RTT + MPP + OpenSBI)
-        run: make CONF=${{ matrix.conf }} rt-smart
+        run: make CONF=${{ env.CONF }} rt-smart
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
@@ -146,23 +193,35 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}/.ccache-rtt
-          key: ccache-rtt-${{ matrix.conf }}-${{ github.run_id }}
+          key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Upload big core outputs
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.conf }}-big
+          name: ${{ env.CONF }}-big
           path: |
-            output/${{ matrix.conf }}/big/
-            output/${{ matrix.conf }}/common/
+            output/${{ env.CONF }}/big/
+            output/${{ env.CONF }}/common/
             src/big/rt-smart/userapps/root/
             src/common/cdk/user/out/big/*
           retention-days: 1
 
-  # ── 小核：Linux + U-Boot + little-core OpenSBI ──
+  # ──────────────────────────────────────────────────────────
+  # 小核：Linux + U-Boot + little-core OpenSBI
+  # 触发: tag *-full/*-little 或 dispatch target=full/little
+  # ──────────────────────────────────────────────────────────
   build-little:
     name: "小核 (Linux+U-Boot)  ${{ matrix.conf }}"
-    if: github.ref_type == 'tag'
+    if: |
+      (github.ref_type == 'tag' && (
+        contains(github.ref_name, '-little') ||
+        contains(github.ref_name, '-full') ||
+        !(contains(github.ref_name, '-big') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
+      ))
+      ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.target == 'full' || github.event.inputs.target == 'little'
+      ))
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     strategy:
@@ -170,6 +229,8 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
+    env:
+      CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
 
     steps:
       - uses: actions/checkout@v4
@@ -195,7 +256,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -211,7 +272,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -219,7 +280,7 @@ jobs:
 
       - name: Prepare toolchain & sources
         if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
-        run: make prepare_sourcecode CONF=${{ matrix.conf }}
+        run: make prepare_sourcecode CONF=${{ env.CONF }}
 
       - name: Link toolchain to /opt/toolchain
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
@@ -244,17 +305,17 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/.ccache
-          key: ccache-linux-${{ matrix.conf }}-${{ github.run_id }}
-          restore-keys: ccache-linux-${{ matrix.conf }}-
+          key: ccache-linux-${{ env.CONF }}-${{ github.run_id }}
+          restore-keys: ccache-linux-${{ env.CONF }}-
 
       - name: Build linux
-        run: make CONF=${{ matrix.conf }} linux
+        run: make CONF=${{ env.CONF }} linux
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 60
 
       - name: Build uboot + opensbi (skip linux)
-        run: make CONF=${{ matrix.conf }} uboot little-core-opensbi -o linux
+        run: make CONF=${{ env.CONF }} uboot little-core-opensbi -o linux
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 20
@@ -267,11 +328,11 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}/.ccache
-          key: ccache-linux-${{ matrix.conf }}-${{ github.run_id }}
+          key: ccache-linux-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Remove kernel source symlinks (prevent 1.3GB artifact bloat)
         run: |
-          MODLIB="output/${{ matrix.conf }}/little/linux/rootfs/lib/modules"
+          MODLIB="output/${{ env.CONF }}/little/linux/rootfs/lib/modules"
           if [ -d "$MODLIB" ]; then
             for d in "$MODLIB"/*/; do
               [ -d "$d" ] || continue
@@ -283,22 +344,34 @@ jobs:
       - name: Upload linux/uboot/opensbi outputs
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.conf }}-little
+          name: ${{ env.CONF }}-little
           path: |
-            output/${{ matrix.conf }}/little/linux/arch/riscv/boot/Image
-            output/${{ matrix.conf }}/little/linux/rootfs/
-            output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc
-            output/${{ matrix.conf }}/little/uboot/tools/mkimage
-            output/${{ matrix.conf }}/little/uboot/tools/mkenvimage
-            output/${{ matrix.conf }}/little/uboot/u-boot.bin
-            output/${{ matrix.conf }}/little/uboot/u-boot-spl.bin
-            output/${{ matrix.conf }}/common/little-opensbi/
+            output/${{ env.CONF }}/little/linux/arch/riscv/boot/Image
+            output/${{ env.CONF }}/little/linux/rootfs/
+            output/${{ env.CONF }}/little/linux/scripts/dtc/dtc
+            output/${{ env.CONF }}/little/uboot/tools/mkimage
+            output/${{ env.CONF }}/little/uboot/tools/mkenvimage
+            output/${{ env.CONF }}/little/uboot/u-boot.bin
+            output/${{ env.CONF }}/little/uboot/u-boot-spl.bin
+            output/${{ env.CONF }}/common/little-opensbi/
           retention-days: 1
 
-  # ── rootfs：Buildroot（独立并行） ──
+  # ──────────────────────────────────────────────────────────
+  # rootfs：Buildroot（独立并行）
+  # 触发: tag *-full/*-rootfs 或 dispatch target=full/rootfs
+  # ──────────────────────────────────────────────────────────
   build-rootfs:
     name: "RootFS (Buildroot)  ${{ matrix.conf }}"
-    if: github.ref_type == 'tag'
+    if: |
+      (github.ref_type == 'tag' && (
+        contains(github.ref_name, '-rootfs') ||
+        contains(github.ref_name, '-full') ||
+        !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-pack'))
+      ))
+      ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.target == 'full' || github.event.inputs.target == 'rootfs'
+      ))
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     strategy:
@@ -306,6 +379,8 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
+    env:
+      CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
 
     steps:
       - uses: actions/checkout@v4
@@ -331,7 +406,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -347,7 +422,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -355,7 +430,7 @@ jobs:
 
       - name: Prepare toolchain & sources
         if: steps.cache-tc.outputs.cache-hit != 'true' || steps.cache-src.outputs.cache-hit != 'true'
-        run: make prepare_sourcecode CONF=${{ matrix.conf }}
+        run: make prepare_sourcecode CONF=${{ env.CONF }}
 
       - name: Link toolchain to /opt/toolchain
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
@@ -383,12 +458,12 @@ jobs:
             cp .github/patches/0003-fix-m4-sigstksz.patch "$M4PATCHDIR/"
             echo "✅ m4 SIGSTKSZ patch installed to $M4PATCHDIR"
           fi
-          OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
-          FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
-          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
+          OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
+          FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
+          CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
           # ── Round 1: buildroot 全量跑（fakeroot _STAT_VER 由 0002-*.patch 自动修复）──
           echo "═══ Round 1: configure + extract ═══"
-          make CONF=${{ matrix.conf }} buildroot 2>&1 || true
+          make CONF=${{ env.CONF }} buildroot 2>&1 || true
           # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
           M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
           if [ -f "$M4F" ]; then
@@ -398,7 +473,7 @@ jobs:
             echo "✅ patched m4"
           fi
           # ── 修复 buildroot 交叉编译器 wrapper（buildroot 可能猜错 sysroot 路径）──
-          WRAP="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
+          WRAP="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           REAL="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin/riscv64-unknown-linux-gnu"
           if [ -d "$WRAP" ] && [ -f "$REAL-gcc" ]; then
             for tool in gcc g++ cpp ld ar as nm ranlib strip objcopy objdump readelf; do
@@ -417,9 +492,9 @@ jobs:
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
           # ── Round 2: 增量重编（m4 & fakeroot 补丁已预装，理论上 Round 1 已过）──
           echo "═══ Round 2: rebuild ═══"
-          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
+          make CONF=${{ env.CONF }} buildroot-rebuild 2>&1 || true
           # ── 所有 buildroot 调用已完成，makedevs stub 不会被覆盖了 ──
-          TGT="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
+          TGT="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
           for n in null console zero mem ttyS0 ttyAMA0; do touch "$TGT/dev/$n"; done
           if [ -f "$FB/makedevs.real" ] || file "$FB/makedevs" 2>/dev/null | grep -q ELF; then
@@ -429,33 +504,45 @@ jobs:
             echo "✅ makedevs stubbed after all builds"
           fi
           # ── 手动 cpio 修复（兜底）──
-          FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
+          FSCR="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
             echo "🔧 Manual cpio..."
             sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
             sed -i '/makedevs /s/^/echo [SKIP] /' "$FSCR"
             sed -i '/chown -h -R 0:0/s/^/echo [SKIP] /' "$FSCR"
             PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
-            make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
+            make CONF=${{ env.CONF }} buildroot-rebuild 2>&1 || true
           fi
           # ── 校验 ──
-          ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
+          ls -la output/${{ env.CONF }}/little/buildroot-ext/images/ || \
             { echo "❌ images/ missing"; exit 1; }
         timeout-minutes: 80
 
       - name: Upload buildroot outputs
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.conf }}-rootfs
+          name: ${{ env.CONF }}-rootfs
           path: |
-            output/${{ matrix.conf }}/little/buildroot-ext/images/
-            output/${{ matrix.conf }}/little/buildroot-ext/host/sbin/mkfs.ext4
+            output/${{ env.CONF }}/little/buildroot-ext/images/
+            output/${{ env.CONF }}/little/buildroot-ext/host/sbin/mkfs.ext4
           retention-days: 1
 
-  # ── 合并 ──
+  # ──────────────────────────────────────────────────────────
+  # 打包镜像：合并三个上游 artifact → genimage → 最终镜像
+  # 触发: tag *-full 或 dispatch target=full/pack
+  # ⚠️ pack 模式需要先有一轮 full 构建产生 artifact
+  # ──────────────────────────────────────────────────────────
   merge:
     name: "打包镜像  ${{ matrix.conf }}"
-    if: github.ref_type == 'tag'
+    if: |
+      (github.ref_type == 'tag' && (
+        contains(github.ref_name, '-full') ||
+        !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
+      ))
+      ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.target == 'full' || github.event.inputs.target == 'pack'
+      ))
     needs: [build-big, build-little, build-rootfs]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -464,6 +551,10 @@ jobs:
       matrix:
         conf:
           - k230_canmv_01studio_defconfig
+    env:
+      CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
+      # pack 模式从指定 run 拉 artifact；full 模式从当前 run 拉
+      ARTIFACT_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pack' && github.event.inputs.artifact_run_id || github.run_id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -492,16 +583,16 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
 
       - name: Prepare output structure
-        run: mkdir -p output/${{ matrix.conf }}/images
+        run: mkdir -p output/${{ env.CONF }}/images
 
       - name: Restore toolchain
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
 
       - name: Link toolchain to /opt/toolchain
         run: |
@@ -511,28 +602,31 @@ jobs:
       - name: Download big core artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.conf }}-big
+          name: ${{ env.CONF }}-big
           path: .
+          run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download little core artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.conf }}-little
+          name: ${{ env.CONF }}-little
           path: .
+          run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download rootfs artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.conf }}-rootfs
+          name: ${{ env.CONF }}-rootfs
           path: .
+          run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Build image
         run: |
-          mkdir -p output/${{ matrix.conf }}/images
-          cp configs/${{ matrix.conf }} .config
-          echo "CONF=${{ matrix.conf }}" > .last_conf
+          mkdir -p output/${{ env.CONF }}/images
+          cp configs/${{ env.CONF }} .config
+          echo "CONF=${{ env.CONF }}" > .last_conf
           export K230_SDK_ROOT="$(pwd)"
-          export BUILD_DIR="$(pwd)/output/${{ matrix.conf }}"
+          export BUILD_DIR="$(pwd)/output/${{ env.CONF }}"
           export RTT_SDK_BUILD_DIR="${BUILD_DIR}/big/rt-smart"
           export MPP_BUILD_DIR="${BUILD_DIR}/big/mpp"
           export BIG_OPENSBI_BUILD_DIR="${BUILD_DIR}/common/big-opensbi"
@@ -548,29 +642,36 @@ jobs:
       - name: Package release
         run: |
           mkdir -p release
-          IMG="output/${{ matrix.conf }}/images/sysimage-sdcard.img.gz"
+          IMG="output/${{ env.CONF }}/images/sysimage-sdcard.img.gz"
           if [ -f "$IMG" ]; then
-            cp "$IMG" "release/${{ matrix.conf }}_sysimage-sdcard.img.gz"
+            cp "$IMG" "release/${{ env.CONF }}_sysimage-sdcard.img.gz"
             ls -lh release/
           else
             echo "❌ Image not found: $IMG"
-            find output/${{ matrix.conf }}/images/ -type f | head -20
+            find output/${{ env.CONF }}/images/ -type f | head -20
             exit 1
           fi
 
       - name: Upload final image
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.conf }}
+          name: ${{ env.CONF }}
           path: release/
           retention-days: 7
 
-  # ============================================================
-  # GitHub Release：汇总全部构建产物
-  # ============================================================
+  # ──────────────────────────────────────────────────────────
+  # GitHub Release：全量构建才发布
+  # 触发: tag *-full 或 dispatch target=full
+  # ──────────────────────────────────────────────────────────
   release:
     name: GitHub Release
-    if: github.ref_type == 'tag'
+    if: |
+      (github.ref_type == 'tag' && (
+        contains(github.ref_name, '-full') ||
+        !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
+      ))
+      ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'full')
     needs: merge
     runs-on: ubuntu-22.04
     permissions:
