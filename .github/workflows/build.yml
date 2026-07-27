@@ -377,6 +377,12 @@ jobs:
           fi
           cp .github/patches/0002-fix-stat-ver-glibc235.patch "$PATCHDIR/"
           echo "✅ fakeroot _STAT_VER patch installed to $PATCHDIR"
+          # ── 安装 m4 SIGSTKSZ patch ──
+          M4PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/m4/m4.mk 2>/dev/null | head -1)")"
+          if [ -d "$M4PATCHDIR" ]; then
+            cp .github/patches/0003-fix-m4-sigstksz.patch "$M4PATCHDIR/"
+            echo "✅ m4 SIGSTKSZ patch installed to $M4PATCHDIR"
+          fi
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
           FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
@@ -399,9 +405,9 @@ jobs:
           fi
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
-          # ── Round 2: 全量构建（确保 toolchain 正确初始化，交叉编译器可用）──
-          echo "═══ Round 2: full build ═══"
-          make CONF=${{ matrix.conf }} buildroot 2>&1 || true
+          # ── Round 2: 增量重编（m4 & fakeroot 补丁已预装，理论上 Round 1 已过）──
+          echo "═══ Round 2: rebuild ═══"
+          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           # ── 所有 buildroot 调用已完成，makedevs stub 不会被覆盖了 ──
           TGT="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
