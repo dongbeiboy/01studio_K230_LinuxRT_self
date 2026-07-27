@@ -96,7 +96,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -211,7 +211,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -269,17 +269,16 @@ jobs:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ matrix.conf }}-${{ github.run_id }}
 
-      - name: Debug rootfs size breakdown (临时排查)
+      - name: Remove kernel source symlinks (prevent 1.3GB artifact bloat)
         run: |
-          D="output/${{ matrix.conf }}/little/linux/rootfs"
-          echo "=== Top-level du ==="
-          du -sh "$D" 2>/dev/null || echo "path not found"
-          echo "=== Subdirs by size ==="
-          du -sh "$D"/*/ 2>/dev/null | sort -rh | head -20
-          echo "=== File count ==="
-          find "$D" -type f 2>/dev/null | wc -l
-          echo "=== Largest 20 files ==="
-          find "$D" -type f -exec du -h {} + 2>/dev/null | sort -rh | head -20
+          MODLIB="output/${{ matrix.conf }}/little/linux/rootfs/lib/modules"
+          if [ -d "$MODLIB" ]; then
+            for d in "$MODLIB"/*/; do
+              [ -d "$d" ] || continue
+              rm -f "$d/build" "$d/source"
+              echo "✅ removed symlinks from $(basename "$d")"
+            done
+          fi
 
       - name: Upload linux/uboot/opensbi outputs
         uses: actions/upload-artifact@v4
@@ -348,7 +347,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -364,9 +363,20 @@ jobs:
 
       - name: Build buildroot
         run: |
+          # ── 确保 buildroot 源码已解压（cache miss 时源码还是 tarball，patch 无法拷贝）──
+          BRW_ROOT="src/little/buildroot-ext"
+          if ! ls -d "$BRW_ROOT"/buildroot-*/ 2>/dev/null | head -1 | grep -q buildroot; then
+            TAR=$(ls "$BRW_ROOT"/dl/buildroot-*.tar.gz 2>/dev/null | head -1)
+            [ -n "$TAR" ] && { echo "📦 cache miss — extracting buildroot first..."; tar --no-same-owner -zxf "$TAR" -C "$BRW_ROOT"; } \
+              || { echo "❌ FATAL: no buildroot tarball found in $BRW_ROOT/dl/"; exit 1; }
+          fi
           # ── 安装 fakeroot patch 到 buildroot 包目录（buildroot 每次提取源码自动 apply）──
-          PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/fakeroot/fakeroot.mk | head -1)")"
+          PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/fakeroot/fakeroot.mk 2>/dev/null | head -1)")"
+          if [ ! -d "$PATCHDIR" ]; then
+            echo "❌ FATAL: PATCHDIR not found — buildroot not extracted?"; exit 1
+          fi
           cp .github/patches/0002-fix-stat-ver-glibc235.patch "$PATCHDIR/"
+          echo "✅ fakeroot _STAT_VER patch installed to $PATCHDIR"
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
           FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
@@ -466,7 +476,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
 
       - name: Prepare output structure
         run: mkdir -p output/${{ matrix.conf }}/images
