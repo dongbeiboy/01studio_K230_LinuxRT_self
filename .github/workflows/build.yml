@@ -399,9 +399,9 @@ jobs:
           fi
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
-          # ── Round 2: 增量重编 ──
-          echo "═══ Round 2: rebuild ═══"
-          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
+          # ── Round 2: 全量构建（确保 toolchain 正确初始化，交叉编译器可用）──
+          echo "═══ Round 2: full build ═══"
+          make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           # ── 所有 buildroot 调用已完成，makedevs stub 不会被覆盖了 ──
           TGT="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
