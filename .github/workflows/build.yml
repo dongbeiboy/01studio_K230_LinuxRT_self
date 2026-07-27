@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -96,7 +96,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -156,6 +156,7 @@ jobs:
             output/${{ matrix.conf }}/big/
             output/${{ matrix.conf }}/common/
             src/big/rt-smart/userapps/root/
+            src/common/cdk/user/out/big/*
           retention-days: 1
 
   # ── 小核：Linux + U-Boot + little-core OpenSBI ──
@@ -194,7 +195,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -210,7 +211,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -268,6 +269,18 @@ jobs:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ matrix.conf }}-${{ github.run_id }}
 
+      - name: Debug rootfs size breakdown (临时排查)
+        run: |
+          D="output/${{ matrix.conf }}/little/linux/rootfs"
+          echo "=== Top-level du ==="
+          du -sh "$D" 2>/dev/null || echo "path not found"
+          echo "=== Subdirs by size ==="
+          du -sh "$D"/*/ 2>/dev/null | sort -rh | head -20
+          echo "=== File count ==="
+          find "$D" -type f 2>/dev/null | wc -l
+          echo "=== Largest 20 files ==="
+          find "$D" -type f -exec du -h {} + 2>/dev/null | sort -rh | head -20
+
       - name: Upload linux/uboot/opensbi outputs
         uses: actions/upload-artifact@v4
         with:
@@ -278,6 +291,8 @@ jobs:
             output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc
             output/${{ matrix.conf }}/little/uboot/tools/mkimage
             output/${{ matrix.conf }}/little/uboot/tools/mkenvimage
+            output/${{ matrix.conf }}/little/uboot/u-boot.bin
+            output/${{ matrix.conf }}/little/uboot/u-boot-spl.bin
             output/${{ matrix.conf }}/common/little-opensbi/
           retention-days: 1
 
@@ -317,7 +332,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -333,7 +348,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -376,17 +391,17 @@ jobs:
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
           # ── Round 2: 增量重编 ──
           echo "═══ Round 2: rebuild ═══"
+          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
+          # ── 所有 buildroot 调用已完成，makedevs stub 不会被覆盖了 ──
           TGT="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
           for n in null console zero mem ttyS0 ttyAMA0; do touch "$TGT/dev/$n"; done
-          # makedevs 可能被重编译覆盖，Round 2 前再次确保 no-op
           if [ -f "$FB/makedevs.real" ] || file "$FB/makedevs" 2>/dev/null | grep -q ELF; then
             mv -f "$FB/makedevs" "$FB/makedevs.real" 2>/dev/null || true
             printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
             chmod +x "$FB/makedevs"
-            echo "✅ re-stubbed makedevs"
+            echo "✅ makedevs stubbed after all builds"
           fi
-          make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           # ── 手动 cpio 修复（兜底）──
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
@@ -451,7 +466,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v6
 
       - name: Prepare output structure
         run: mkdir -p output/${{ matrix.conf }}/images
@@ -460,7 +475,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v4
+          key: toolchain-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v4
 
       - name: Link toolchain to /opt/toolchain
         run: |
@@ -500,8 +515,8 @@ jobs:
           export LINUX_BUILD_DIR="${BUILD_DIR}/little/linux"
           export BUILDROOT_BUILD_DIR="${BUILD_DIR}/little/buildroot-ext"
           export UBOOT_BUILD_DIR="${BUILD_DIR}/little/uboot"
-          export UBOOT_BUILD_DIR="${BUILD_DIR}/little/uboot"
           export IMAGE_DIR="${BUILD_DIR}/images"
+          export RTSMART_SRC_DIR="${K230_SDK_ROOT}/src/big/rt-smart"
           bash board/common/gen_image_script/gen_image.sh
 
       - name: Package release
