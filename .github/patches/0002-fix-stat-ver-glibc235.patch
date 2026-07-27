@@ -1,0 +1,12 @@
+--- libfakeroot.c.orig	2026-07-27 11:49:26.338409734 +0800
++++ libfakeroot.c	2026-07-27 11:49:36.233569081 +0800
+@@ -58,6 +58,9 @@
+ 
+ #include "config.h"
+ #include "communicate.h"
++#ifndef _STAT_VER
++#define _STAT_VER 1
++#endif
+ 
+ #ifdef __APPLE__
+ /* The *xattr functions are currently disabled on __APPLE__ since the prototypes

@@ -344,6 +344,9 @@ jobs:
 
       - name: Build buildroot
         run: |
+          # ── 安装 fakeroot patch 到 buildroot 包目录（buildroot 每次提取源码自动 apply）──
+          PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/fakeroot/fakeroot.mk | head -1)")"
+          cp .github/patches/0002-fix-stat-ver-glibc235.patch "$PATCHDIR/"
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
           FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
