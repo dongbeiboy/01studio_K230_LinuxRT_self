@@ -358,16 +358,21 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
-          # ── Patch fakeroot _STAT_VER (glibc 2.35) —— 全面替换所有 _STAT_VER 引用为 1 ──
+          # ── Patch fakeroot _STAT_VER (glibc 2.35) + 锁定 stamps 防止重新提取 ──
           FK="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
           if [ -f "$FK" ]; then
-            sed -i 's/NEXT_STAT64(_STAT_VER,/NEXT_STAT64(1,/g' "$FK"
-            sed -i 's/NEXT_LSTAT64(_STAT_VER,/NEXT_LSTAT64(1,/g' "$FK"
-            sed -i 's/NEXT_FSTAT64(_STAT_VER,/NEXT_FSTAT64(1,/g' "$FK"
-            sed -i 's/NEXT_FSTATAT64(_STAT_VER,/NEXT_FSTATAT64(1,/g' "$FK"
-            sed -i 's/SEND_GET_STAT64(\([^,]*\), _STAT_VER)/SEND_GET_STAT64(\1, 1)/g' "$FK"
-            rm -f "$OUT/host-fakeroot-1.25.3/.stamp_built"
-            echo "✅ patched fakeroot (_STAT_VER → 1)"
+            # 方案：printf 首行插入比 sed '1i' 更可靠
+            printf '#define _STAT_VER 1\n' | cat - "$FK" > "$FK.tmp" && mv "$FK.tmp" "$FK"
+            # 直替所有 NEXT_*64/SEND_GET_STAT64 中的 _STAT_VER → 1（双保险）
+            sed -i 's/_STAT_VER/1/g' "$FK"
+            # 锁定 extraction/patched/configured stamps，只删 built/installed 促重编
+            touch "$OUT/host-fakeroot-1.25.3/.stamp_extracted" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_patched" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_configured" 2>/dev/null || true
+            rm -f "$OUT/host-fakeroot-1.25.3/.stamp_built" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_host_installed" \
+                  "$OUT/host-fakeroot-1.25.3/.stamp_installed"
+            echo "✅ patched fakeroot (stamps locked)"
           fi
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
