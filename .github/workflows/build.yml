@@ -96,7 +96,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -210,7 +210,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -328,7 +328,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -347,7 +347,7 @@ jobs:
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
           FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
-          # ── Round 1: buildroot 全量跑（下载+配置+编译，m4/fakeroot 会失败，正常）──
+          # ── Round 1: buildroot 全量跑（fakeroot _STAT_VER 由 0002-*.patch 自动修复）──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
@@ -357,22 +357,6 @@ jobs:
             sed -i 's|# *elif.*SIGSTKSZ *< *16384|#elif 0 /* CI */|' "$M4F"
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
-          fi
-          # ── Patch fakeroot _STAT_VER (glibc 2.35) + 锁定 stamps 防止重新提取 ──
-          FK="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
-          if [ -f "$FK" ]; then
-            # 方案：printf 首行插入比 sed '1i' 更可靠
-            printf '#define _STAT_VER 1\n' | cat - "$FK" > "$FK.tmp" && mv "$FK.tmp" "$FK"
-            # 直替所有 NEXT_*64/SEND_GET_STAT64 中的 _STAT_VER → 1（双保险）
-            sed -i 's/_STAT_VER/1/g' "$FK"
-            # 锁定 extraction/patched/configured stamps，只删 built/installed 促重编
-            touch "$OUT/host-fakeroot-1.25.3/.stamp_extracted" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_patched" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_configured" 2>/dev/null || true
-            rm -f "$OUT/host-fakeroot-1.25.3/.stamp_built" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_host_installed" \
-                  "$OUT/host-fakeroot-1.25.3/.stamp_installed"
-            echo "✅ patched fakeroot (stamps locked)"
           fi
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
@@ -396,8 +380,6 @@ jobs:
           # ── 校验 ──
           ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
             { echo "❌ images/ missing"; exit 1; }
-        env:
-          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
 
       - name: Upload buildroot outputs
@@ -448,7 +430,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v5
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/k230_canmv_01studio_defconfig') }}-v6
 
       - name: Prepare output structure
         run: mkdir -p output/${{ matrix.conf }}/images
