@@ -50,10 +50,11 @@ env:
 jobs:
   # ──────────────────────────────────────────────────────────
   # 轻量门禁：push/PR 每次必跑，0 成本
+  # 不响应 tag / workflow_dispatch
   # ──────────────────────────────────────────────────────────
   check:
     name: Check
-    if: github.event_name == 'pull_request' || github.ref_type == 'branch'
+    if: github.event_name != 'workflow_dispatch' && (github.event_name == 'pull_request' || github.ref_type == 'branch')
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
