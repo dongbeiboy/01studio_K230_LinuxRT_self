@@ -358,12 +358,16 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
-          # ── Patch fakeroot _STAT_VER (glibc 2.35) —— 只改 libfakeroot.c ──
+          # ── Patch fakeroot _STAT_VER (glibc 2.35) —— 全面替换所有 _STAT_VER 引用为 1 ──
           FK="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
-          if [ -f "$FK" ] && ! grep -q '_STAT_VER 1' "$FK"; then
-            sed -i '1i#define _STAT_VER 1' "$FK"
+          if [ -f "$FK" ]; then
+            sed -i 's/NEXT_STAT64(_STAT_VER,/NEXT_STAT64(1,/g' "$FK"
+            sed -i 's/NEXT_LSTAT64(_STAT_VER,/NEXT_LSTAT64(1,/g' "$FK"
+            sed -i 's/NEXT_FSTAT64(_STAT_VER,/NEXT_FSTAT64(1,/g' "$FK"
+            sed -i 's/NEXT_FSTATAT64(_STAT_VER,/NEXT_FSTATAT64(1,/g' "$FK"
+            sed -i 's/SEND_GET_STAT64(\([^,]*\), _STAT_VER)/SEND_GET_STAT64(\1, 1)/g' "$FK"
             rm -f "$OUT/host-fakeroot-1.25.3/.stamp_built"
-            echo "✅ patched fakeroot (_STAT_VER)"
+            echo "✅ patched fakeroot (_STAT_VER → 1)"
           fi
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
