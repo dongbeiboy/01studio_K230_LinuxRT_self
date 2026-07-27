@@ -273,7 +273,12 @@ jobs:
         with:
           name: ${{ matrix.conf }}-little
           path: |
-            output/${{ matrix.conf }}/little/
+            output/${{ matrix.conf }}/little/linux/arch/riscv/boot/Image
+            output/${{ matrix.conf }}/little/linux/rootfs/
+            output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc
+            output/${{ matrix.conf }}/little/uboot/tools/mkimage
+            output/${{ matrix.conf }}/little/uboot/tools/mkenvimage
+            output/${{ matrix.conf }}/common/little-opensbi/
           retention-days: 1
 
   # ── rootfs：Buildroot（独立并行） ──
@@ -371,14 +376,22 @@ jobs:
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
           # ── Round 2: 增量重编 ──
           echo "═══ Round 2: rebuild ═══"
+          TGT="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
+          mkdir -p "$TGT/dev"
+          for n in null console zero mem ttyS0 ttyAMA0; do touch "$TGT/dev/$n"; done
+          # makedevs 可能被重编译覆盖，Round 2 前再次确保 no-op
+          if [ -f "$FB/makedevs.real" ] || file "$FB/makedevs" 2>/dev/null | grep -q ELF; then
+            mv -f "$FB/makedevs" "$FB/makedevs.real" 2>/dev/null || true
+            printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
+            chmod +x "$FB/makedevs"
+            echo "✅ re-stubbed makedevs"
+          fi
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
-          # ── 手动 cpio 修复（mknod/chown/makedevs 在 GitHub runner 上无权限）──
+          # ── 手动 cpio 修复（兜底）──
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
             echo "🔧 Manual cpio..."
-            sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
-            sed -i '/makedevs /s/^/echo [SKIP] /' "$FSCR"
-            sed -i '/chown -h -R 0:0/s/^/echo [SKIP] /' "$FSCR"
+            sed -i '/mknod \|makedevs \|chown -h -R 0:0/s/^/echo [SKIP] /' "$FSCR"
             PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
@@ -392,7 +405,8 @@ jobs:
         with:
           name: ${{ matrix.conf }}-rootfs
           path: |
-            output/${{ matrix.conf }}/little/buildroot-ext/
+            output/${{ matrix.conf }}/little/buildroot-ext/images/
+            output/${{ matrix.conf }}/little/buildroot-ext/host/sbin/mkfs.ext4
           retention-days: 1
 
   # ── 合并 ──
