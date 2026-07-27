@@ -397,6 +397,16 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
+          # ── 修复 buildroot 交叉编译器 wrapper（buildroot 可能猜错 sysroot 路径）──
+          WRAP="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
+          REAL="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin/riscv64-unknown-linux-gnu"
+          if [ -d "$WRAP" ] && [ -f "$REAL-gcc" ]; then
+            for tool in gcc g++ cpp ld ar as nm ranlib strip objcopy objdump readelf; do
+              W="$WRAP/riscv64-unknown-linux-gnu-$tool"
+              [ -f "$W" ] && printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$W" && chmod +x "$W"
+            done
+            echo "✅ cross-compiler wrappers fixed (direct passthrough)"
+          fi
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
