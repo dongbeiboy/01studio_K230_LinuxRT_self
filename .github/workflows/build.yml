@@ -268,23 +268,12 @@ jobs:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ matrix.conf }}-${{ github.run_id }}
 
-      - name: Pack little outputs
-        run: |
-          rm -rf output/${{ matrix.conf }}/little/linux/rootfs/lib/modules/*/build \
-                 output/${{ matrix.conf }}/little/linux/rootfs/lib/modules/*/source \
-                 2>/dev/null || true
-          tar -czf little-out.tar.gz \
-            output/${{ matrix.conf }}/little/linux/arch/riscv/boot/Image \
-            output/${{ matrix.conf }}/little/linux/rootfs/ \
-            output/${{ matrix.conf }}/little/linux/scripts/dtc/dtc \
-            output/${{ matrix.conf }}/little/uboot/tools/ \
-            output/${{ matrix.conf }}/common/little-opensbi/
-
-      - name: Upload little outputs
+      - name: Upload linux/uboot/opensbi outputs
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.conf }}-little
-          path: little-out.tar.gz
+          path: |
+            output/${{ matrix.conf }}/little/
           retention-days: 1
 
   # ── rootfs：Buildroot（独立并行） ──
@@ -377,7 +366,7 @@ jobs:
           FK_DIR="$OUT/host-fakeroot-1.25.3"
           mkdir -p "$FK_DIR"
           for stamp in downloaded extracted patched configured built stamped installed \
-                       host_installed staging_installed target_installed; do
+                       staging_installed target_installed; do
             touch "$FK_DIR/.stamp_$stamp"
           done
           # 拷贝系统 fakeroot 二进制到 buildroot 的 host/bin
@@ -408,14 +397,6 @@ jobs:
             PATH="$FB:$FB/../sbin:/usr/bin:$PATH" bash "$FSCR" && touch "$IMGDIR/rootfs.cpio" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
-          # ── 压缩 ext2 到实际最小尺寸（预分配 500M → 实际 ~50M）──
-          EXT2="$IMGDIR/rootfs.ext2"
-          if [ -f "$EXT2" ]; then
-            sudo apt-get install -y -qq e2fsprogs 2>/dev/null || true
-            sudo e2fsck -fy "$EXT2" 2>/dev/null || true
-            sudo resize2fs -M "$EXT2"
-            echo "✅ ext2 shrunk to $(du -h "$EXT2" | cut -f1)"
-          fi
           # ── 最终校验：images/ 必须非空 ──
           echo "=== buildroot images ==="
           ls -la "$IMGDIR/" || { echo "❌ images/ missing"; exit 1; }
@@ -432,7 +413,7 @@ jobs:
         with:
           name: ${{ matrix.conf }}-rootfs
           path: |
-            output/${{ matrix.conf }}/little/buildroot-ext/images/
+            output/${{ matrix.conf }}/little/buildroot-ext/
           retention-days: 1
 
   # ── 合并 ──
@@ -503,14 +484,11 @@ jobs:
           name: ${{ matrix.conf }}-little
           path: .
 
-      - name: Extract little outputs
-        run: tar -xzf little-out.tar.gz
-
       - name: Download rootfs artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.conf }}-rootfs
-          path: output/${{ matrix.conf }}/little/buildroot-ext/images
+          path: .
 
       - name: Build image
         run: |
@@ -520,10 +498,15 @@ jobs:
           export K230_SDK_ROOT="$(pwd)"
           export BUILD_DIR="$(pwd)/output/${{ matrix.conf }}"
           export RTT_SDK_BUILD_DIR="${BUILD_DIR}/big/rt-smart"
+          export MPP_BUILD_DIR="${BUILD_DIR}/big/mpp"
           export BIG_OPENSBI_BUILD_DIR="${BUILD_DIR}/common/big-opensbi"
           export LITTLE_OPENSBI_BUILD_DIR="${BUILD_DIR}/common/little-opensbi"
+          export CDK_BUILD_DIR="${BUILD_DIR}/common/cdk"
           export LINUX_BUILD_DIR="${BUILD_DIR}/little/linux"
           export BUILDROOT_BUILD_DIR="${BUILD_DIR}/little/buildroot-ext"
+          export UBOOT_BUILD_DIR="${BUILD_DIR}/little/uboot"
+          export UBOOT_BUILD_DIR="${BUILD_DIR}/little/uboot"
+          export IMAGE_DIR="${BUILD_DIR}/images"
           bash board/common/gen_image_script/gen_image.sh
 
       - name: Package release
