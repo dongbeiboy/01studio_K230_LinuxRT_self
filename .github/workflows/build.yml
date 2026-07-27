@@ -96,7 +96,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -107,7 +107,7 @@ jobs:
         run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
       - name: Link toolchain to /opt/toolchain
-        run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+        run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
       - name: Setup ccache wrapper for RTT toolchain (musl)
         run: |
@@ -211,7 +211,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -222,7 +222,7 @@ jobs:
         run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
       - name: Link toolchain to /opt/toolchain
-        run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+        run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
       - name: Setup ccache wrapper for Linux toolchain
         run: |
@@ -347,7 +347,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -358,7 +358,7 @@ jobs:
         run: make prepare_sourcecode CONF=${{ matrix.conf }}
 
       - name: Link toolchain to /opt/toolchain
-        run: sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+        run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
 
       - name: Build buildroot
@@ -476,7 +476,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}') }}-v7
+          key: sources-${{ matrix.conf }}-${{ hashFiles('Makefile', 'configs/${{ matrix.conf }}', '.github/patches/**') }}-v8
 
       - name: Prepare output structure
         run: mkdir -p output/${{ matrix.conf }}/images
@@ -489,7 +489,7 @@ jobs:
 
       - name: Link toolchain to /opt/toolchain
         run: |
-          sudo ln -sf "$(pwd)/toolchain" /opt/toolchain
+          sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
           ls /opt/toolchain/*/bin/*gcc 2>/dev/null || echo "⚠️ toolchain incomplete — check may fail"
 
       - name: Download big core artifact
