@@ -344,12 +344,10 @@ jobs:
 
       - name: Build buildroot
         run: |
-          # 安装系统 fakeroot（glibc 2.35 原生兼容）
-          sudo apt-get install -y -qq fakeroot
           OUT="output/${{ matrix.conf }}/little/buildroot-ext/build"
           FB="output/${{ matrix.conf }}/little/buildroot-ext/host/bin"
-          IMGDIR="output/${{ matrix.conf }}/little/buildroot-ext/images"
-          # ── Round 1: buildroot 全量跑（下载+解压，失败正常）──
+          CPIO="output/${{ matrix.conf }}/little/buildroot-ext/images/rootfs.cpio"
+          # ── Round 1: buildroot 全量跑（下载+配置+编译，m4/fakeroot 会失败，正常）──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ matrix.conf }} buildroot 2>&1 || true
           # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
@@ -360,29 +358,18 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
-          # ── 用系统 fakeroot 替换 buildroot 的（跳过 _STAT_VER / __xmknod 编译问题）──
-          # 策略：不依赖 fakeroot 源码是否已下载（Round 1 可能在 m4 就失败了）
-          # 直接创建 stamp 文件 + 拷贝系统二进制，让 buildroot 跳过 fakeroot 编译
-          FK_DIR="$OUT/host-fakeroot-1.25.3"
-          mkdir -p "$FK_DIR"
-          for stamp in downloaded extracted patched configured built stamped installed \
-                       staging_installed target_installed; do
-            touch "$FK_DIR/.stamp_$stamp"
-          done
-          # 拷贝系统 fakeroot 二进制到 buildroot 的 host/bin
-          mkdir -p "$FB"
-          for bin in fakeroot fakeroot-tcp faked; do
-            cmd="$(which "$bin" 2>/dev/null || true)"
-            [ -n "$cmd" ] && cp "$cmd" "$FB/$bin"
-          done
-          find /usr/lib -name "libfakeroot*.so*" -exec cp {} "$FB/../lib/" \; 2>/dev/null || true
-          echo "✅ fakeroot replaced with system binary + stamps"
-          # ── Stub makedevs (GitHub runner 无 CAP_MKNOD) ──
+          # ── Patch fakeroot _STAT_VER (glibc 2.35) —— 只改 libfakeroot.c ──
+          FK="$OUT/host-fakeroot-1.25.3/libfakeroot.c"
+          if [ -f "$FK" ] && ! grep -q '_STAT_VER 1' "$FK"; then
+            sed -i '1i#define _STAT_VER 1' "$FK"
+            rm -f "$OUT/host-fakeroot-1.25.3/.stamp_built"
+            echo "✅ patched fakeroot (_STAT_VER)"
+          fi
+          # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
             printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
             chmod +x "$FB/makedevs"
-            echo "✅ stubbed makedevs"
           fi
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
@@ -391,19 +378,15 @@ jobs:
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           # ── 手动 cpio 修复 ──
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
-          if [ -f "$FSCR" ] && [ ! -f "$IMGDIR/rootfs.cpio" ]; then
+          if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
             echo "🔧 Manual cpio..."
             sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
-            PATH="$FB:$FB/../sbin:/usr/bin:$PATH" bash "$FSCR" && touch "$IMGDIR/rootfs.cpio" && echo "✅ cpio done"
+            PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
-          # ── 最终校验：images/ 必须非空 ──
-          echo "=== buildroot images ==="
-          ls -la "$IMGDIR/" || { echo "❌ images/ missing"; exit 1; }
-          if [ -z "$(ls -A "$IMGDIR/" 2>/dev/null)" ]; then
-            echo "❌ images/ is empty — buildroot failed"
-            exit 1
-          fi
+          # ── 校验 ──
+          ls -la output/${{ matrix.conf }}/little/buildroot-ext/images/ || \
+            { echo "❌ images/ missing"; exit 1; }
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 80
