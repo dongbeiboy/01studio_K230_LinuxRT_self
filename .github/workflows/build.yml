@@ -372,11 +372,13 @@ jobs:
           # ── Round 2: 增量重编 ──
           echo "═══ Round 2: rebuild ═══"
           make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
-          # ── 手动 cpio 修复 ──
+          # ── 手动 cpio 修复（mknod/chown/makedevs 在 GitHub runner 上无权限）──
           FSCR="output/${{ matrix.conf }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
             echo "🔧 Manual cpio..."
             sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
+            sed -i '/makedevs /s/^/echo [SKIP] /' "$FSCR"
+            sed -i '/chown -h -R 0:0/s/^/echo [SKIP] /' "$FSCR"
             PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
             make CONF=${{ matrix.conf }} buildroot-rebuild 2>&1 || true
           fi
