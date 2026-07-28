@@ -33,6 +33,11 @@ on:
         description: '【仅 target=pack 需要】artifact 来源的 workflow run ID'
         required: false
         type: string
+      debug:
+        description: '调试模式：输出完整 shell 展开（set -x）'
+        required: false
+        type: boolean
+        default: false
 
 env:
   BUILD_CONFS: |
@@ -103,6 +108,7 @@ jobs:
     env:
       # dispatch 时用输入的 defconfig，tag 时用矩阵值
       CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
+      DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -232,6 +238,7 @@ jobs:
           - k230_canmv_01studio_defconfig
     env:
       CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
+      DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -240,6 +247,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
+          ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
@@ -382,6 +390,7 @@ jobs:
           - k230_canmv_01studio_defconfig
     env:
       CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
+      DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -390,6 +399,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
+          ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
@@ -439,6 +449,7 @@ jobs:
 
       - name: Build buildroot
         run: |
+          ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
           # ── 确保 buildroot 源码已解压（cache miss 时源码还是 tarball，patch 无法拷贝）──
           BRW_ROOT="src/little/buildroot-ext"
           if ! ls -d "$BRW_ROOT"/buildroot-*/ 2>/dev/null | head -1 | grep -q buildroot; then
@@ -466,21 +477,36 @@ jobs:
           # buildroot 的 relpath_prefix 在 Xuantie-900 multilib sysroot 上产生 broken symlink，
           # copy_toolchain_lib_root 永久卡死。直接干掉该步骤，Round 1 后手动 rsync 替代。
           BR_PKG_MK="$(ls src/little/buildroot-ext/buildroot-*/toolchain/toolchain-external/pkg-toolchain-external.mk 2>/dev/null | head -1)"
-          if [ -f "$BR_PKG_MK" ]; then
-            sed -i 's/^\t*$$(TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS)/\t@echo "CI: skipped broken toolchain target libs copy"/' "$BR_PKG_MK"
-            echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
+          if [ ! -f "$BR_PKG_MK" ]; then
+            echo "❌ FATAL: pkg-toolchain-external.mk not found"; exit 1
           fi
+          if ! grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
+            echo "❌ FATAL: target libs install hook not found in mk file"; exit 1
+          fi
+          sed -i 's/^\t*$$(TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS)/\t@echo "CI: skipped broken toolchain target libs copy"/' "$BR_PKG_MK"
+          if grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
+            echo "❌ FATAL: sed patch failed — TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS still present"; exit 1
+          fi
+          echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
           # ── Round 1: buildroot 全量跑（挂死步骤已 patch 掉）──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ env.CONF }} buildroot 2>&1
           # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
           echo "📦 Copying target libs from real toolchain sysroot..."
-          mkdir -p "output/${{ env.CONF }}/little/buildroot-ext/target/lib" \
-                   "output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib"
+          TARGET_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/lib"
+          TARGET_USR_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib"
+          mkdir -p "$TARGET_LIB" "$TARGET_USR_LIB"
           TC_SYSROOT="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot"
-          rsync -a "$TC_SYSROOT/lib64/lp64d/"*.so* "output/${{ env.CONF }}/little/buildroot-ext/target/lib/" 2>/dev/null || true
-          rsync -a "$TC_SYSROOT/usr/lib64/lp64d/"*.so* "output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib/" 2>/dev/null || true
-          echo "✅ target libs copied (lp64d)"
+          rsync -a "$TC_SYSROOT/lib64/lp64d/"*.so* "$TARGET_LIB/"
+          rc1=$?; rsync -a "$TC_SYSROOT/usr/lib64/lp64d/"*.so* "$TARGET_USR_LIB/"
+          rc2=$?
+          if [ $rc1 -ne 0 ] || [ $rc2 -ne 0 ]; then
+            echo "❌ FATAL: rsync target libs failed (lib=$rc1 usr/lib=$rc2)"; exit 1
+          fi
+          if [ -z "$(ls -A "$TARGET_LIB"/libc.so* 2>/dev/null)" ]; then
+            echo "❌ FATAL: target libs missing — rsync copied nothing"; exit 1
+          fi
+          echo "✅ target libs copied ($(ls "$TARGET_LIB"/*.so* 2>/dev/null | wc -l) .so files)"
           # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
           M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
           if [ -f "$M4F" ]; then
@@ -577,6 +603,7 @@ jobs:
           - k230_canmv_01studio_defconfig
     env:
       CONF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.defconfig || matrix.conf }}
+      DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
       # pack 模式从指定 run 拉 artifact；full 模式从当前 run 拉
       ARTIFACT_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pack' && github.event.inputs.artifact_run_id || github.run_id }}
 
@@ -646,6 +673,7 @@ jobs:
 
       - name: Build image
         run: |
+          ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
           mkdir -p output/${{ env.CONF }}/images
           cp configs/${{ env.CONF }} .config
           echo "CONF=${{ env.CONF }}" > .last_conf
