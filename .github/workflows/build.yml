@@ -528,8 +528,11 @@ jobs:
             done
           ) &
           WATCHDOG_PID=$!
+          set +e  # allow Round 1 failure — ncurses etc. expected to fail with broken buildroot wrapper
           timeout 1800 make CONF=${{ env.CONF }} buildroot 2>&1
-          RC=$?; kill $WATCHDOG_PID 2>/dev/null || true
+          RC=$?
+          set -e  # re-enable errexit for subsequent steps
+          kill $WATCHDOG_PID 2>/dev/null || true
           if [ $RC -eq 124 ]; then
             echo "⚠️ Round 1 30min timeout — dumping stuck processes"
             for p in $(ps -eo pid,etime,args --no-headers 2>/dev/null | grep -E 'readlink|find|readelf|stat|cp ' | awk '{print $1}'); do
