@@ -540,6 +540,26 @@ jobs:
           elif [ $RC -ne 0 ]; then
             echo "⚠️ Round 1 non-zero exit (may be expected — config warnings, etc.)"
           fi
+          # ── 重写 wrapper（Round 1 内部 toolchain-wrapper.c 覆盖了）──
+          WRAP="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
+          REAL="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin/riscv64-unknown-linux-gnu"
+          SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
+          mkdir -p "$WRAP"
+          for tool in gcc g++ cpp; do
+            printf '#!/bin/sh\nexec %s-%s --sysroot "%s" -mabi=lp64d -march=rv64imafdcxthead "$@"\n' "$REAL" "$tool" "$SYSROOT" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
+            chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
+          done
+          for tool in ld ar as nm ranlib strip objcopy objdump readelf; do
+            printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
+            chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
+          done
+          # 自检
+          printf 'int main(){return 0;}\n' > /tmp/ci_test.c
+          if ! "$WRAP/riscv64-unknown-linux-gnu-gcc" /tmp/ci_test.c -o /tmp/ci_test 2>/tmp/ci_test.err; then
+            echo "❌ wrapper FAILED after Round 1: $(cat /tmp/ci_test.err)"; exit 1
+          fi
+          rm -f /tmp/ci_test.c /tmp/ci_test /tmp/ci_test.err
+          echo "✅ wrapper re-fixed after Round 1"
           # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
           echo "📦 Copying target libs from real toolchain sysroot..."
           TARGET_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/lib"
@@ -564,35 +584,7 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
-          # ── 修复 buildroot 交叉编译器 wrapper（无条件：即使 dir 不存在也建）──
-          WRAP="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
-          REAL="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin/riscv64-unknown-linux-gnu"
-          SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
-          mkdir -p "$WRAP"
-          for tool in gcc g++ cpp; do
-            printf '#!/bin/sh\nexec %s-%s --sysroot "%s" -mabi=lp64d -march=rv64imafdcxthead "$@"\n' "$REAL" "$tool" "$SYSROOT" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
-            chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
-          done
-          for tool in ld ar as nm ranlib strip objcopy objdump readelf; do
-            printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
-            chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
-          done
-          echo "✅ cross-compiler wrappers fixed (sysroot+mabi+march)"
-          # 自检：wrapper 能否编译成功
-          printf 'int main(){return 0;}\n' > /tmp/ci_test_wrapper.c
-          if "$WRAP/riscv64-unknown-linux-gnu-gcc" /tmp/ci_test_wrapper.c -o /tmp/ci_test_wrapper 2>/tmp/ci_test_wrapper.err; then
-            echo "✅ wrapper self-test passed"
-            rm -f /tmp/ci_test_wrapper.c /tmp/ci_test_wrapper /tmp/ci_test_wrapper.err
-          else
-            echo "❌ wrapper self-test FAILED"
-            echo "  gcc: $(file "$REAL-gcc" 2>/dev/null || echo missing)"
-            echo "  wrapper: $(file "$WRAP/riscv64-unknown-linux-gnu-gcc" 2>/dev/null || echo missing)"
-            echo "  sysroot: $(ls -d "$SYSROOT" 2>/dev/null || echo missing)"
-            echo "  crt1.o: $(find "$SYSROOT" -name crt1.o 2>/dev/null | head -1 || echo missing)"
-            echo "  gcc stderr:"; cat /tmp/ci_test_wrapper.err
-            rm -f /tmp/ci_test_wrapper.c /tmp/ci_test_wrapper /tmp/ci_test_wrapper.err
-            exit 1
-          fi
+          # wrapper fix moved to after Round 1 (Round 1 internally overwrites it via toolchain-wrapper.c)
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
