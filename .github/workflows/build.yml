@@ -154,7 +154,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v12
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -285,7 +285,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v12
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -437,7 +437,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v12
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -468,19 +468,23 @@ jobs:
           [ -d "$BRW_DIR/package/m4" ] && cp .github/patches/0003-fix-m4-sigstksz.patch "$BRW_DIR/package/m4/"
           > "$BRW_DIR/support/scripts/check-bin-arch" printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n'
           echo "✅ patches installed"
-          # ── 3. 绕过 copy_toolchain_lib_root ──
-          # INSTALL_STAGING_CMDS 的 TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS
-          # 调用了 copy_toolchain_lib_root，在 Xuantie-900 sysroot 上产出残废 staging。
-          # 替换为 cp -a 整目录复制（不调用任何 helpers.mk 函数）。
+          # ── 3. 绕过 buildroot 的 copy_toolchain_lib_root ──
+          # 在 INSTALL_STAGING_CMDS 中删掉 INSTALL_SYSROOT_LIBS 这行，
+          # 改由我们提前 cp -a 工具链 sysroot 到 staging（走 readlink -f 会卡）。
           PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
-          sed -i 's#^\([[:space:]]*\)\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS).*#\1cp -a \$\$(TOOLCHAIN_EXTERNAL_SYSROOT_DIR)/* \$\$(STAGING_DIR)/ 2>/dev/null || true#' "$PKG_MK"
-          echo "✅ INSTALL_SYSROOT_LIBS → cp -a"
+          sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
+          echo "✅ removed INSTALL_SYSROOT_LIBS from staging CMDS"
           # helpers.mk: readlink -f → readlink -m（target libs 步骤仍会用到）
           sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
           echo "✅ helpers.mk: readlink -f → readlink -m"
           # cpio.mk 去 mknod
           sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
           echo "✅ cpio mknod disabled"
+          # 预填充 staging：上面删掉了 INSTALL_SYSROOT_LIBS，这里手动 cp
+          STGDIR="output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
+          mkdir -p "$STGDIR"
+          cp -a /opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot/* "$STGDIR/" 2>/dev/null || true
+          echo "✅ staging pre-populated ($(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l) libc found)"
           # ── 4. 单次 buildroot ──
           echo "═══ buildroot ═══"
           timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
@@ -573,7 +577,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v12
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
 
       - name: Prepare output structure
         run: mkdir -p output/${{ env.CONF }}/images
