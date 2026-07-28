@@ -476,6 +476,12 @@ jobs:
             sed -i '/Fixing libtool files/a\\t@echo "  .la files to fix: $$(find $$(STAGING_DIR)/usr/lib* -name \"*.la\" 2>/dev/null | wc -l)"' "$PKG_GEN_MK"
             echo "✅ pkg-generic.mk progress display patched"
           fi
+          # stub check-bin-arch: watchdog 抓到 readelf -h 在 target 文件上用户态卡死 (wchan=0)
+          CHK_BIN="$(ls src/little/buildroot-ext/buildroot-*/support/scripts/check-bin-arch 2>/dev/null | head -1)"
+          if [ -f "$CHK_BIN" ]; then
+            printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$CHK_BIN"
+            echo "✅ check-bin-arch stubbed"
+          fi
           OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
