@@ -1,5 +1,9 @@
 name: Build & Release
 
+concurrency:
+  group: ${{ github.ref_name }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -459,7 +463,7 @@ jobs:
           fi
           # ── 安装 fakeroot patch 到 buildroot 包目录（buildroot 每次提取源码自动 apply）──
           PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/fakeroot/fakeroot.mk 2>/dev/null | head -1)")"
-          if [ ! -d "$PATCHDIR" ]; then
+          if [ ! -d "$PATCHDIR" ] || [ ! -f "$PATCHDIR/fakeroot.mk" ]; then
             echo "❌ FATAL: PATCHDIR not found — buildroot not extracted?"; exit 1
           fi
           cp .github/patches/0002-fix-stat-ver-glibc235.patch "$PATCHDIR/"
