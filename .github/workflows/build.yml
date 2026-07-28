@@ -550,7 +550,7 @@ jobs:
           SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
           mkdir -p "$WRAP"
           for tool in gcc g++ cpp; do
-            printf '#!/bin/sh\nexec %s-%s --sysroot "%s" -mabi=lp64d -march=rv64imafdcxthead "$@"\n' "$REAL" "$tool" "$SYSROOT" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
+            printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
             chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
           done
           for tool in ld ar as nm ranlib strip objcopy objdump readelf; do
