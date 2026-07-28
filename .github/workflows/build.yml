@@ -483,9 +483,10 @@ jobs:
           if ! grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
             echo "❌ FATAL: target libs install hook not found in mk file"; exit 1
           fi
-          sed -i 's/^\t*$$(TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS)/\t@echo "CI: skipped broken toolchain target libs copy"/' "$BR_PKG_MK"
-          if grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
-            echo "❌ FATAL: sed patch failed — TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS still present"; exit 1
+          # 用注释跳过该行（比精确 sed 替换更鲁棒，不依赖 tab/$$ 精确格式）
+          sed -i '/TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS/s/^/#CI-SKIP: /' "$BR_PKG_MK"
+          if grep -q '^[^#]*TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
+            echo "❌ FATAL: sed patch failed — TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS still active"; exit 1
           fi
           echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
           # ── Round 1: buildroot 全量跑（挂死步骤已 patch 掉）──
