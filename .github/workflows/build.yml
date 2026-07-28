@@ -154,7 +154,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -285,7 +285,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -437,7 +437,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -455,66 +455,51 @@ jobs:
         run: |
           ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
           BRW_ROOT="src/little/buildroot-ext"
-          # ── 1. 解压 buildroot 源码 ──
+          # ── 1. 解压 buildroot ──
           if ! ls -d "$BRW_ROOT"/buildroot-*/ 2>/dev/null | head -1 | grep -q buildroot; then
             TAR=$(ls "$BRW_ROOT"/dl/buildroot-*.tar.gz 2>/dev/null | head -1)
-            [ -n "$TAR" ] && { echo "📦 cache miss — extracting buildroot..."; tar --no-same-owner -zxf "$TAR" -C "$BRW_ROOT"; } \
+            [ -n "$TAR" ] && { echo "📦 extracting buildroot..."; tar --no-same-owner -zxf "$TAR" -C "$BRW_ROOT"; } \
               || { echo "❌ FATAL: no buildroot tarball"; exit 1; }
           fi
-          # ── 2. 安装补丁 ──
           BRW_DIR="$(ls -d src/little/buildroot-ext/buildroot-*/ 2>/dev/null | head -1)"
-          PATCHDIR="$BRW_DIR/package/fakeroot"
-          [ -d "$PATCHDIR" ] || { echo "❌ FATAL: PATCHDIR not found"; exit 1; }
-          cp .github/patches/0002-fix-stat-ver-glibc235.patch "$PATCHDIR/"
-          echo "✅ fakeroot _STAT_VER patch"
-          M4PD="$BRW_DIR/package/m4"
-          [ -d "$M4PD" ] && cp .github/patches/0003-fix-m4-sigstksz.patch "$M4PD/" && echo "✅ m4 SIGSTKSZ patch"
-          # pkg-generic.mk 进度显示
-          TAB="$(printf '\t')"
-          sed -i "/Fixing libtool files/i\\${TAB}@echo \"  .la files to fix:\"; find \$(STAGING_DIR)/usr/lib* -name '*.la' 2>/dev/null | wc -l" "$BRW_DIR/package/pkg-generic.mk"
-          echo "✅ pkg-generic.mk progress"
-          # check-bin-arch stub
-          printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
-          echo "✅ check-bin-arch stubbed"
-          # ── 3. 替换 INSTALL_TARGET_CMDS：用 cp -a 替代卡死的 copy_toolchain_lib_root ──
-          BR_PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
-          [ -f "$BR_PKG_MK" ] || { echo "❌ FATAL: pkg-toolchain-external.mk not found"; exit 1; }
-          DEF_LINE=$(grep -n 'define.*_INSTALL_TARGET_CMDS' "$BR_PKG_MK" | head -1 | cut -d: -f1)
-          END_REL=$(tail -n +$DEF_LINE "$BR_PKG_MK" | grep -n '^endef' | head -1 | cut -d: -f1)
-          [ -n "$DEF_LINE" ] && [ -n "$END_REL" ] || { echo "❌ FATAL: define/endef bounds"; exit 1; }
-          END_LINE=$((DEF_LINE + END_REL - 1))
-          # cp -a 保留 symlink（不 dereference），不会像 readlink -f 那样在 Xuantie-900 sysroot 上卡死
-          cat <(head -n $((DEF_LINE - 1)) "$BR_PKG_MK") \
-              <(printf '%s\n' \
-                  "define TOOLCHAIN_EXTERNAL_INSTALL_TARGET_CMDS" \
-                  "	mkdir -p \$(TARGET_DIR)/lib \$(TARGET_DIR)/usr/lib" \
-                  "	cp -a \$(TOOLCHAIN_EXTERNAL_SYSROOT_DIR)/lib/*.so* \$(TARGET_DIR)/lib/ 2>/dev/null || true" \
-                  "	cp -a \$(TOOLCHAIN_EXTERNAL_SYSROOT_DIR)/usr/lib/*.so* \$(TARGET_DIR)/usr/lib/ 2>/dev/null || true" \
-                  "endef") \
-              <(tail -n +$((END_LINE + 1)) "$BR_PKG_MK") > "$BR_PKG_MK.tmp"
-          mv "$BR_PKG_MK.tmp" "$BR_PKG_MK"
-          echo "✅ INSTALL_TARGET_CMDS replaced with safe cp -a"
-          # cpio.mk 去掉 mknod
+          # ── 2. 补丁 ──
+          [ -d "$BRW_DIR/package/fakeroot" ] || { echo "❌ FATAL: fakeroot dir not found"; exit 1; }
+          cp .github/patches/0002-fix-stat-ver-glibc235.patch "$BRW_DIR/package/fakeroot/"
+          [ -d "$BRW_DIR/package/m4" ] && cp .github/patches/0003-fix-m4-sigstksz.patch "$BRW_DIR/package/m4/"
+          > "$BRW_DIR/support/scripts/check-bin-arch" printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n'
+          echo "✅ patches installed"
+          # ── 3. 修复工具链 sysroot: 删掉 broken symlinks ──
+          # Xuantie-900 多架构 sysroot 里的某些 symlink 目标不存在，
+          # buildroot 的 copy_toolchain_lib_root 调用 readlink -f 会永久卡死。
+          # 直接删掉这些 broken symlink，让 buildroot 原生流程正常工作。
+          TSYS="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot"
+          BAD=$(find "$TSYS" -xtype l 2>/dev/null | wc -l)
+          if [ "$BAD" -gt 0 ]; then
+            echo "🔧 Removing $BAD broken symlinks from toolchain sysroot..."
+            find "$TSYS" -xtype l -delete 2>/dev/null
+            REMAIN=$(find "$TSYS" -xtype l 2>/dev/null | wc -l)
+            echo "✅ broken symlinks: $BAD → $REMAIN"
+          else
+            echo "✅ no broken symlinks"
+          fi
+          # ── 4. cpio.mk 去 mknod ──
           sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
-          echo "✅ cpio.mk mknod disabled"
-          # ── 4. 跑一次 buildroot ──
+          echo "✅ cpio mknod disabled"
+          # ── 5. 单次 buildroot ──
           echo "═══ buildroot ═══"
           timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
-          # ── 5. 收尾 ──
+          # ── 6. 收尾 ──
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
-          # makedevs no-op
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
             printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
             chmod +x "$FB/makedevs"
             echo "✅ makedevs stubbed"
           fi
-          # device nodes
           TGT="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
           for n in null console zero mem ttyS0 ttyAMA0; do touch "$TGT/dev/$n"; done
-          # cpio 兜底
           FSCR="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
             echo "🔧 Manual cpio..."
@@ -522,7 +507,6 @@ jobs:
             sed -i '/makedevs /s/^/echo [SKIP] /' "$FSCR"
             PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
           fi
-          # 校验
           [ -f "$CPIO" ] && [ -s "$CPIO" ] || { echo "❌ FATAL: rootfs.cpio missing/empty"; exit 1; }
           echo "✅ rootfs.cpio built ($(du -h "$CPIO" | cut -f1))"
         timeout-minutes: 80
@@ -593,7 +577,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
 
       - name: Prepare output structure
         run: mkdir -p output/${{ env.CONF }}/images
