@@ -550,12 +550,13 @@ jobs:
             echo "⚠️ Round 1 non-zero exit (may be expected — config warnings, etc.)"
           fi
           # ── 重写 wrapper（Round 1 内部 toolchain-wrapper.c 覆盖了）──
+          # 必须带 --sysroot，否则交叉 gcc 链接时找不到 crt0.o/libc.so
           WRAP="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           REAL="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin/riscv64-unknown-linux-gnu"
           SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
           mkdir -p "$WRAP"
           for tool in gcc g++ cpp; do
-            printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
+            printf '#!/bin/sh\nexec %s-%s --sysroot="%s" "$@"\n' "$REAL" "$tool" "$SYSROOT" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
             chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
           done
           for tool in ld ar as nm ranlib strip objcopy objdump readelf; do
@@ -568,7 +569,7 @@ jobs:
             echo "❌ wrapper FAILED after Round 1: $(cat /tmp/ci_test.err)"; exit 1
           fi
           rm -f /tmp/ci_test.c /tmp/ci_test /tmp/ci_test.err
-          echo "✅ wrapper re-fixed after Round 1"
+          echo "✅ wrapper re-fixed after Round 1 (with --sysroot)"
           # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
           echo "📦 Copying target libs from STAGING_DIR..."
           TARGET_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/lib"
