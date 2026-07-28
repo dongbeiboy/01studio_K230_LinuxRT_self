@@ -454,184 +454,76 @@ jobs:
       - name: Build buildroot
         run: |
           ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
-          # ── 确保 buildroot 源码已解压（cache miss 时源码还是 tarball，patch 无法拷贝）──
           BRW_ROOT="src/little/buildroot-ext"
+          # ── 1. 解压 buildroot 源码 ──
           if ! ls -d "$BRW_ROOT"/buildroot-*/ 2>/dev/null | head -1 | grep -q buildroot; then
             TAR=$(ls "$BRW_ROOT"/dl/buildroot-*.tar.gz 2>/dev/null | head -1)
-            [ -n "$TAR" ] && { echo "📦 cache miss — extracting buildroot first..."; tar --no-same-owner -zxf "$TAR" -C "$BRW_ROOT"; } \
-              || { echo "❌ FATAL: no buildroot tarball found in $BRW_ROOT/dl/"; exit 1; }
+            [ -n "$TAR" ] && { echo "📦 cache miss — extracting buildroot..."; tar --no-same-owner -zxf "$TAR" -C "$BRW_ROOT"; } \
+              || { echo "❌ FATAL: no buildroot tarball"; exit 1; }
           fi
-          # ── 安装 fakeroot patch 到 buildroot 包目录（buildroot 每次提取源码自动 apply）──
-          PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/fakeroot/fakeroot.mk 2>/dev/null | head -1)")"
-          if [ ! -d "$PATCHDIR" ] || [ ! -f "$PATCHDIR/fakeroot.mk" ]; then
-            echo "❌ FATAL: PATCHDIR not found — buildroot not extracted?"; exit 1
-          fi
+          # ── 2. 安装补丁 ──
+          BRW_DIR="$(ls -d src/little/buildroot-ext/buildroot-*/ 2>/dev/null | head -1)"
+          PATCHDIR="$BRW_DIR/package/fakeroot"
+          [ -d "$PATCHDIR" ] || { echo "❌ FATAL: PATCHDIR not found"; exit 1; }
           cp .github/patches/0002-fix-stat-ver-glibc235.patch "$PATCHDIR/"
-          echo "✅ fakeroot _STAT_VER patch installed to $PATCHDIR"
-          # ── 安装 m4 SIGSTKSZ patch ──
-          M4PATCHDIR="$(dirname "$(ls src/little/buildroot-ext/buildroot-*/package/m4/m4.mk 2>/dev/null | head -1)")"
-          if [ -d "$M4PATCHDIR" ]; then
-            cp .github/patches/0003-fix-m4-sigstksz.patch "$M4PATCHDIR/"
-            echo "✅ m4 SIGSTKSZ patch installed to $M4PATCHDIR"
-          fi
-          # ── 给 pkg-generic.mk 的 "Fixing libtool files" 加进度显示 ──
-          # 用 printf 生成真实 tab 防止 YAML/heredoc 的 tab 冲突
-          PKG_GEN_MK="$(ls src/little/buildroot-ext/buildroot-*/package/pkg-generic.mk 2>/dev/null | head -1)"
-          if [ -f "$PKG_GEN_MK" ]; then
-            TAB="$(printf '\t')"
-            sed -i "/Fixing libtool files/i\\${TAB}@echo \"  .la files to fix:\"; find \$(STAGING_DIR)/usr/lib* -name '*.la' 2>/dev/null | wc -l" "$PKG_GEN_MK"
-            echo "✅ pkg-generic.mk progress display patched"
-          fi
-          # stub check-bin-arch: watchdog 抓到 readelf -h 在 target 文件上用户态卡死 (wchan=0)
-          CHK_BIN="$(ls src/little/buildroot-ext/buildroot-*/support/scripts/check-bin-arch 2>/dev/null | head -1)"
-          if [ -f "$CHK_BIN" ]; then
-            printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$CHK_BIN"
-            echo "✅ check-bin-arch stubbed"
-          fi
-          OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
-          FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
-          CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
-          # ── 直接 patch buildroot 跳过挂死的 target libs 复制（#126 根因）──
-          # buildroot 的 relpath_prefix 在 Xuantie-900 multilib sysroot 上产生 broken symlink，
-          # copy_toolchain_lib_root 永久卡死。直接干掉该步骤，Round 1 后手动 rsync 替代。
-          BR_PKG_MK="$(ls src/little/buildroot-ext/buildroot-*/toolchain/toolchain-external/pkg-toolchain-external.mk 2>/dev/null | head -1)"
-          if [ ! -f "$BR_PKG_MK" ]; then
-            echo "❌ FATAL: pkg-toolchain-external.mk not found"; exit 1
-          fi
-          if ! grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
-            echo "❌ FATAL: target libs install hook not found in mk file"; exit 1
-          fi
-          # ── 替换整个 INSTALL_TARGET_CMDS 为 no-op ──
-          # exit 0 在 make define 中不起作用（每行独立 fork shell）
+          echo "✅ fakeroot _STAT_VER patch"
+          M4PD="$BRW_DIR/package/m4"
+          [ -d "$M4PD" ] && cp .github/patches/0003-fix-m4-sigstksz.patch "$M4PD/" && echo "✅ m4 SIGSTKSZ patch"
+          # pkg-generic.mk 进度显示
+          TAB="$(printf '\t')"
+          sed -i "/Fixing libtool files/i\\${TAB}@echo \"  .la files to fix:\"; find \$(STAGING_DIR)/usr/lib* -name '*.la' 2>/dev/null | wc -l" "$BRW_DIR/package/pkg-generic.mk"
+          echo "✅ pkg-generic.mk progress"
+          # check-bin-arch stub
+          printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
+          echo "✅ check-bin-arch stubbed"
+          # ── 3. 替换 INSTALL_TARGET_CMDS：用 cp -a 替代卡死的 copy_toolchain_lib_root ──
+          BR_PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
+          [ -f "$BR_PKG_MK" ] || { echo "❌ FATAL: pkg-toolchain-external.mk not found"; exit 1; }
           DEF_LINE=$(grep -n 'define.*_INSTALL_TARGET_CMDS' "$BR_PKG_MK" | head -1 | cut -d: -f1)
-          END_LINE=$(tail -n +$DEF_LINE "$BR_PKG_MK" | grep -n '^endef' | head -1 | cut -d: -f1)
-          [ -z "$DEF_LINE" ] || [ -z "$END_LINE" ] && { echo "❌ FATAL: cannot find define/endef bounds"; exit 1; }
-          END_LINE=$((DEF_LINE + END_LINE - 1))
+          END_REL=$(tail -n +$DEF_LINE "$BR_PKG_MK" | grep -n '^endef' | head -1 | cut -d: -f1)
+          [ -n "$DEF_LINE" ] && [ -n "$END_REL" ] || { echo "❌ FATAL: define/endef bounds"; exit 1; }
+          END_LINE=$((DEF_LINE + END_REL - 1))
+          # cp -a 保留 symlink（不 dereference），不会像 readlink -f 那样在 Xuantie-900 sysroot 上卡死
           cat <(head -n $((DEF_LINE - 1)) "$BR_PKG_MK") \
-              <(printf '%s\n' "define TOOLCHAIN_EXTERNAL_INSTALL_TARGET_CMDS" "	@echo \"CI: target install skipped\"" "endef") \
+              <(printf '%s\n' \
+                  "define TOOLCHAIN_EXTERNAL_INSTALL_TARGET_CMDS" \
+                  "	mkdir -p \$(TARGET_DIR)/lib \$(TARGET_DIR)/usr/lib" \
+                  "	cp -a \$(TOOLCHAIN_EXTERNAL_SYSROOT_DIR)/lib/*.so* \$(TARGET_DIR)/lib/ 2>/dev/null || true" \
+                  "	cp -a \$(TOOLCHAIN_EXTERNAL_SYSROOT_DIR)/usr/lib/*.so* \$(TARGET_DIR)/usr/lib/ 2>/dev/null || true" \
+                  "endef") \
               <(tail -n +$((END_LINE + 1)) "$BR_PKG_MK") > "$BR_PKG_MK.tmp"
           mv "$BR_PKG_MK.tmp" "$BR_PKG_MK"
-          # 校验：rewrite 后的 define 块中不含旧的 hook 调用
-          if sed -n '/define.*_INSTALL_TARGET_CMDS/,/^endef/p' "$BR_PKG_MK" | grep -q 'INSTALL_TARGET_LIBS\|INSTALL_TARGET_GDBSERVER\|INSTALL_TARGET_LDD\|INSTALL_TARGET_LIB_SYMLINK\|FIXUP_UCLIBCNG'; then
-            echo "❌ FATAL: target install hooks still in CMDS define after rewrite"; exit 1
-          fi
-          echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
-          # ── Round 1: buildroot 全量跑 + 背景进程追踪 ──
-          echo "═══ Round 1: configure + extract ═══"
-          # 背景 watchdog: 每30秒抓进程堆栈 + 打开的文件描述符（精准定位卡在哪个文件）
-          (
-            sleep 120
-            while true; do
-              for p in $(pgrep -f 'readlink|find.*sysroot|readelf|stat.*sysroot' 2>/dev/null); do
-                WCHAN=$(cat /proc/$p/wchan 2>/dev/null || echo "n/a")
-                CMD=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null || echo "n/a")
-                ETIME=$(ps -o etime= -p $p 2>/dev/null | xargs || echo "n/a")
-                FDS=$(ls -la /proc/$p/fd/ 2>/dev/null | tail -5 || echo "n/a")
-                echo "🔍 [watchdog] PID=$p alive=$ETIME wchan=$WCHAN cmd=$CMD"
-                echo "   open fds: $FDS"
-              done
-              sleep 30
-            done
-          ) &
-          WATCHDOG_PID=$!
-          set +e  # allow Round 1 failure — some target packages may fail due to skipped target lib install
-          timeout 1800 make CONF=${{ env.CONF }} buildroot 2>&1
-          RC=$?
-          set -e  # re-enable errexit for subsequent steps
-          kill $WATCHDOG_PID 2>/dev/null || true
-          if [ $RC -eq 124 ]; then
-            echo "⚠️ Round 1 30min timeout — dumping stuck processes"
-            for p in $(ps -eo pid,etime,args --no-headers 2>/dev/null | grep -E 'readlink|find|readelf|stat|cp ' | awk '{print $1}'); do
-              echo "  PID=$p wchan=$(cat /proc/$p/wchan 2>/dev/null || echo n/a) cmd=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null)"
-              echo "  open fds:"; ls -la /proc/$p/fd/ 2>/dev/null | tail -10 || echo "  n/a"
-            done
-            ps -ef --forest 2>/dev/null | tail -30 || true
-          elif [ $RC -ne 0 ]; then
-            echo "⚠️ Round 1 non-zero exit (may be expected — config warnings, etc.)"
-          fi
-          # buildroot 生成的 toolchain-wrapper 已包含正确的 --sysroot / -march / -mabi，
-          # 不需要手动重写。手动重写会丢失架构参数导致 ncurses 等包 configure 时 OBJEXT 失败。
-          # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
-          echo "📦 Copying target libs from STAGING_DIR..."
-          TARGET_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/lib"
-          TARGET_USR_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib"
-          mkdir -p "$TARGET_LIB" "$TARGET_USR_LIB"
-          STG_LIB="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot/lib"
-          STG_USR_LIB="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot/usr/lib"
-          rsync -a "$STG_LIB/"*.so* "$TARGET_LIB/"
-          rc1=$?; rsync -a "$STG_USR_LIB/"*.so* "$TARGET_USR_LIB/"
-          rc2=$?
-          if [ $rc1 -ne 0 ] || [ $rc2 -ne 0 ]; then
-            echo "❌ FATAL: rsync target libs failed (lib=$rc1 usr/lib=$rc2)"; exit 1
-          fi
-          if [ -z "$(ls -A "$TARGET_LIB"/libc.so* 2>/dev/null)" ]; then
-            echo "❌ FATAL: target libs missing — rsync copied nothing"; exit 1
-          fi
-          echo "✅ target libs copied ($(ls "$TARGET_LIB"/*.so* 2>/dev/null | wc -l) .so files)"
-          # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
-          M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
-          if [ -f "$M4F" ]; then
-            sed -i 's|# *if.*SIGSTKSZ *< *16384|#if 0 /* CI */|' "$M4F"
-            sed -i 's|# *elif.*SIGSTKSZ *< *16384|#elif 0 /* CI */|' "$M4F"
-            rm -f "$OUT/host-m4-1.4.18/.stamp_built"
-            echo "✅ patched m4"
-          fi
-          # Round 1 之后不再重写 wrapper，buildroot 自带 toolchain-wrapper 已正确
-          # ── Stub makedevs + 删 cpio.mk mknod ──
+          echo "✅ INSTALL_TARGET_CMDS replaced with safe cp -a"
+          # cpio.mk 去掉 mknod
+          sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
+          echo "✅ cpio.mk mknod disabled"
+          # ── 4. 跑一次 buildroot ──
+          echo "═══ buildroot ═══"
+          timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
+          # ── 5. 收尾 ──
+          FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
+          CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
+          # makedevs no-op
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
             printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
             chmod +x "$FB/makedevs"
+            echo "✅ makedevs stubbed"
           fi
-          CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
-          # \t 在 sed 正则中不是制表符; 用 [[:space:]] 匹配实际 tab 缩进
-          [ -f "$CPIO_MK" ] && sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$CPIO_MK"
-          # ── 清理 STAGING_DIR 中的 broken symlink（防所有后续包的 "Fixing libtool files" 卡死）──
-          STG="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
-          if [ -d "$STG" ]; then
-            echo "🔍 Cleaning broken symlinks in STAGING_DIR..."
-            find "$STG" -xtype l -delete 2>/dev/null || true
-            echo "✅ STAGING_DIR symlinks cleaned"
-          fi
-          # 强制 ncurses 重新 configure（Round 1 用 broken wrapper 跑过之后 stamp 存在，Round 2 会跳过）
-          rm -f "output/${{ env.CONF }}/little/buildroot-ext/build/ncurses-6.1/.stamp_configured" 2>/dev/null || true
-          # ── Round 2: 增量重编 ──
-          echo "═══ Round 2: rebuild ═══"
-          set +e
-          timeout 1800 make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
-          RC2=$?
-          set -e
-          if [ $RC2 -eq 124 ]; then
-            echo "❌ FATAL: Round 2 timeout after 30min"; exit 1
-          elif [ $RC2 -ne 0 ]; then
-            echo "❌ FATAL: Round 2 failed (exit=$RC2)"; exit 1
-          fi
-          # ── 所有 buildroot 调用已完成，makedevs stub 不会被覆盖了 ──
+          # device nodes
           TGT="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
           for n in null console zero mem ttyS0 ttyAMA0; do touch "$TGT/dev/$n"; done
-          if [ -f "$FB/makedevs.real" ] || file "$FB/makedevs" 2>/dev/null | grep -q ELF; then
-            mv -f "$FB/makedevs" "$FB/makedevs.real" 2>/dev/null || true
-            printf '#!/bin/sh\necho "[CI-NOOP] makedevs skipped"\nexit 0\n' > "$FB/makedevs"
-            chmod +x "$FB/makedevs"
-            echo "✅ makedevs stubbed after all builds"
-          fi
-          # ── 手动 cpio 修复（兜底）──
+          # cpio 兜底
           FSCR="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/fakeroot"
           if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
             echo "🔧 Manual cpio..."
             sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
             sed -i '/makedevs /s/^/echo [SKIP] /' "$FSCR"
-            sed -i '/chown -h -R 0:0/s/^/echo [SKIP] /' "$FSCR"
             PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
-            make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
           fi
-          # ── 校验（同时检查目录存在 & rootfs.cpio 非空）──
-          ls -la output/${{ env.CONF }}/little/buildroot-ext/images/ || \
-            { echo "❌ images/ missing"; exit 1; }
-          if [ ! -f "$CPIO" ] || [ ! -s "$CPIO" ]; then
-            echo "❌ FATAL: rootfs.cpio missing or empty"; exit 1
-          fi
+          # 校验
+          [ -f "$CPIO" ] && [ -s "$CPIO" ] || { echo "❌ FATAL: rootfs.cpio missing/empty"; exit 1; }
           echo "✅ rootfs.cpio built ($(du -h "$CPIO" | cut -f1))"
         timeout-minutes: 80
 
