@@ -556,6 +556,13 @@ jobs:
           fi
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
           [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
+          # ── 清理 STAGING_DIR 中的 broken symlink（防所有后续包的 "Fixing libtool files" 卡死）──
+          STG="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
+          if [ -d "$STG" ]; then
+            echo "🔍 Cleaning broken symlinks in STAGING_DIR..."
+            find "$STG" -xtype l -delete 2>/dev/null || true
+            echo "✅ STAGING_DIR symlinks cleaned"
+          fi
           # ── Round 2: 增量重编（不再吞错误，暴露真实失败点）──
           echo "═══ Round 2: rebuild ═══"
           make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
