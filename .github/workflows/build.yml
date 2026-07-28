@@ -462,17 +462,18 @@ jobs:
           OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
-          # ── 预建 stamp：跳过 buildroot 内置 target libs 复制（#126 挂死根因）──
-          # buildroot 的 relpath_prefix 在 Xuantie-900 multilib sysroot 上生成错误 symlink，
-          # 导致 copy_toolchain_lib_root 永久卡死。预建 stamp 令 buildroot 跳过此步骤，
-          # Round 1 后手动从真实工具链复制。
-          STAMP_DIR="output/${{ env.CONF }}/little/buildroot-ext/build/toolchain-external-custom"
-          mkdir -p "$STAMP_DIR" && touch "$STAMP_DIR/.stamp_target_installed"
-          echo "✅ pre-stamped toolchain target install (bypass broken symlink fixup)"
-          # ── Round 1: buildroot 全量跑（target libs 已预跳过，不会卡死）──
+          # ── 直接 patch buildroot 跳过挂死的 target libs 复制（#126 根因）──
+          # buildroot 的 relpath_prefix 在 Xuantie-900 multilib sysroot 上产生 broken symlink，
+          # copy_toolchain_lib_root 永久卡死。直接干掉该步骤，Round 1 后手动 rsync 替代。
+          BR_PKG_MK="$(ls src/little/buildroot-ext/buildroot-*/toolchain/toolchain-external/pkg-toolchain-external.mk 2>/dev/null | head -1)"
+          if [ -f "$BR_PKG_MK" ]; then
+            sed -i 's/^\t*$$(TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS)/\t@echo "CI: skipped broken toolchain target libs copy"/' "$BR_PKG_MK"
+            echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
+          fi
+          # ── Round 1: buildroot 全量跑（挂死步骤已 patch 掉）──
           echo "═══ Round 1: configure + extract ═══"
           make CONF=${{ env.CONF }} buildroot 2>&1
-          # ── 手动从真实工具链复制 target 库（不经过 buildroot 的 broken symlink fixup）──
+          # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
           echo "📦 Copying target libs from real toolchain sysroot..."
           mkdir -p "output/${{ env.CONF }}/little/buildroot-ext/target/lib" \
                    "output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib"
