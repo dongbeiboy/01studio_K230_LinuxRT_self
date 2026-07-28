@@ -482,9 +482,18 @@ jobs:
           echo "✅ cpio mknod disabled"
           # 预填充 staging：上面删掉了 INSTALL_SYSROOT_LIBS，这里手动 cp
           STGDIR="output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
+          TC=/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0
           mkdir -p "$STGDIR"
-          cp -a /opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot/* "$STGDIR/" 2>/dev/null || true
-          echo "✅ staging pre-populated ($(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l) libc found)"
+          SYSROOT="$("$TC/bin/riscv64-unknown-linux-gnu-gcc" -print-sysroot 2>/dev/null)"
+          if [ -z "$SYSROOT" ] || [ ! -d "$SYSROOT" ]; then
+            SYSROOT=$(dirname $(dirname $(find "$TC" -maxdepth 5 -name 'libc.so*' 2>/dev/null | head -1)))
+          fi
+          [ -d "$SYSROOT" ] || { echo "❌ FATAL: cannot resolve toolchain sysroot (gcc=$(which riscv64-unknown-linux-gnu-gcc 2>/dev/null))"; exit 1; }
+          echo "📦 cp -a $SYSROOT → $STGDIR"
+          cp -a "$SYSROOT"/. "$STGDIR"/
+          n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
+          [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
+          echo "✅ staging pre-populated ($n libc found)"
           # ── 4. 单次 buildroot ──
           echo "═══ buildroot ═══"
           timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
