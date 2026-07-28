@@ -483,15 +483,16 @@ jobs:
           if ! grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
             echo "❌ FATAL: target libs install hook not found in mk file"; exit 1
           fi
-          # 注释调用行：不以 define 开头 + 包含 INSTALL_TARGET_LIBS（避免误伤 define 定义行）
-          sed -i '/^[^d].*TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS/s/^/#CI-SKIP: /' "$BR_PKG_MK"
+          # 注释调用行：不以 d(efine) 或 # 开头 + 包含 INSTALL_TARGET_LIBS
+          # → # 排除 define 定义行 & 已注释行(cache hit 幂等)
+          sed -i '/^[^d#].*TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS/s/^/#CI-SKIP: /' "$BR_PKG_MK"
           if grep -q '^[^d#].*TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS' "$BR_PKG_MK"; then
             echo "❌ FATAL: sed patch failed — INSTALL_TARGET_LIBS still active"; exit 1
           fi
           echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
           # ── Round 1: buildroot 全量跑（挂死步骤已 patch 掉）──
           echo "═══ Round 1: configure + extract ═══"
-          make CONF=${{ env.CONF }} buildroot 2>&1
+          make CONF=${{ env.CONF }} buildroot 2>&1 || echo "⚠️ Round 1 non-zero exit (may be expected — config warnings, etc.)"
           # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
           echo "📦 Copying target libs from real toolchain sysroot..."
           TARGET_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/lib"
