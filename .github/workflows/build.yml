@@ -462,16 +462,24 @@ jobs:
           OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
-          # ── Round 1: buildroot 全量跑（timeout 10min）──
-          echo "═══ Round 1: configure + extract (timeout 10min) ═══"
-          timeout 600 make CONF=${{ env.CONF }} buildroot 2>&1 || echo "⚠️ Round 1 timed out / failed (expected, proceeding to fixes)"
-          # ── 清理 sysroot 符号链接环（Round 1 的 toolchain-external-custom 刚创建完，防 Round 2 再挂）──
-          XT_SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
-          if [ -d "$XT_SYSROOT" ]; then
-            echo "🔍 Checking for symlink loops in toolchain sysroot..."
-            find -L "$XT_SYSROOT" -xtype l -delete 2>/dev/null || true
-            echo "✅ Symlink cleanup done"
-          fi
+          # ── 预建 stamp：跳过 buildroot 内置 target libs 复制（#126 挂死根因）──
+          # buildroot 的 relpath_prefix 在 Xuantie-900 multilib sysroot 上生成错误 symlink，
+          # 导致 copy_toolchain_lib_root 永久卡死。预建 stamp 令 buildroot 跳过此步骤，
+          # Round 1 后手动从真实工具链复制。
+          STAMP_DIR="output/${{ env.CONF }}/little/buildroot-ext/build/toolchain-external-custom"
+          mkdir -p "$STAMP_DIR" && touch "$STAMP_DIR/.stamp_target_installed"
+          echo "✅ pre-stamped toolchain target install (bypass broken symlink fixup)"
+          # ── Round 1: buildroot 全量跑（target libs 已预跳过，不会卡死）──
+          echo "═══ Round 1: configure + extract ═══"
+          make CONF=${{ env.CONF }} buildroot 2>&1
+          # ── 手动从真实工具链复制 target 库（不经过 buildroot 的 broken symlink fixup）──
+          echo "📦 Copying target libs from real toolchain sysroot..."
+          mkdir -p "output/${{ env.CONF }}/little/buildroot-ext/target/lib" \
+                   "output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib"
+          TC_SYSROOT="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot"
+          rsync -a "$TC_SYSROOT/lib64/lp64d/"*.so* "output/${{ env.CONF }}/little/buildroot-ext/target/lib/" 2>/dev/null || true
+          rsync -a "$TC_SYSROOT/usr/lib64/lp64d/"*.so* "output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib/" 2>/dev/null || true
+          echo "✅ target libs copied (lp64d)"
           # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
           M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
           if [ -f "$M4F" ]; then
