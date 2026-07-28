@@ -473,7 +473,8 @@ jobs:
           # ── 给 pkg-generic.mk 的 "Fixing libtool files" 加进度显示 ──
           PKG_GEN_MK="$(ls src/little/buildroot-ext/buildroot-*/package/pkg-generic.mk 2>/dev/null | head -1)"
           if [ -f "$PKG_GEN_MK" ]; then
-            sed -i '/Fixing libtool files/a\\t@echo "  .la files to fix: $$(find $$(STAGING_DIR)/usr/lib* -name \"*.la\" 2>/dev/null | wc -l)"' "$PKG_GEN_MK"
+            # $$$$ → Make sees $$ → shell sees $ (command substitution)
+            sed -i '/Fixing libtool files/a\\t@echo "  .la files to fix: $$$$(find $$$$(STAGING_DIR)/usr/lib* -name \"*.la\" 2>/dev/null | wc -l)"' "$PKG_GEN_MK"
             echo "✅ pkg-generic.mk progress display patched"
           fi
           # stub check-bin-arch: watchdog 抓到 readelf -h 在 target 文件上用户态卡死 (wchan=0)
@@ -596,7 +597,8 @@ jobs:
             chmod +x "$FB/makedevs"
           fi
           CPIO_MK="$(ls src/little/buildroot-ext/buildroot-*/fs/cpio/cpio.mk 2>/dev/null | head -1)"
-          [ -f "$CPIO_MK" ] && sed -i 's/^\t*mknod /#CI-DISABLED mknod /' "$CPIO_MK"
+          # \t 在 sed 正则中不是制表符; 用 [[:space:]] 匹配实际 tab 缩进
+          [ -f "$CPIO_MK" ] && sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$CPIO_MK"
           # ── 清理 STAGING_DIR 中的 broken symlink（防所有后续包的 "Fixing libtool files" 卡死）──
           STG="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
           if [ -d "$STG" ]; then
@@ -606,9 +608,17 @@ jobs:
           fi
           # 强制 ncurses 重新 configure（Round 1 用 broken wrapper 跑过之后 stamp 存在，Round 2 会跳过）
           rm -f "output/${{ env.CONF }}/little/buildroot-ext/build/ncurses-6.1/.stamp_configured" 2>/dev/null || true
-          # ── Round 2: 增量重编（不再吞错误，暴露真实失败点）──
+          # ── Round 2: 增量重编 ──
           echo "═══ Round 2: rebuild ═══"
-          make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
+          set +e
+          timeout 1800 make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
+          RC2=$?
+          set -e
+          if [ $RC2 -eq 124 ]; then
+            echo "❌ FATAL: Round 2 timeout after 30min"; exit 1
+          elif [ $RC2 -ne 0 ]; then
+            echo "❌ FATAL: Round 2 failed (exit=$RC2)"; exit 1
+          fi
           # ── 所有 buildroot 调用已完成，makedevs stub 不会被覆盖了 ──
           TGT="output/${{ env.CONF }}/little/buildroot-ext/build/buildroot-fs/cpio/target"
           mkdir -p "$TGT/dev"
@@ -629,9 +639,13 @@ jobs:
             PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
             make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
           fi
-          # ── 校验 ──
+          # ── 校验（同时检查目录存在 & rootfs.cpio 非空）──
           ls -la output/${{ env.CONF }}/little/buildroot-ext/images/ || \
             { echo "❌ images/ missing"; exit 1; }
+          if [ ! -f "$CPIO" ] || [ ! -s "$CPIO" ]; then
+            echo "❌ FATAL: rootfs.cpio missing or empty"; exit 1
+          fi
+          echo "✅ rootfs.cpio built ($(du -h "$CPIO" | cut -f1))"
         timeout-minutes: 80
 
       - name: Upload buildroot outputs
