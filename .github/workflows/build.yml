@@ -593,6 +593,8 @@ jobs:
             find "$STG" -xtype l -delete 2>/dev/null || true
             echo "✅ STAGING_DIR symlinks cleaned"
           fi
+          # 强制 ncurses 重新 configure（Round 1 用 broken wrapper 跑过之后 stamp 存在，Round 2 会跳过）
+          rm -f "output/${{ env.CONF }}/little/buildroot-ext/build/ncurses-6.1/.stamp_configured" 2>/dev/null || true
           # ── Round 2: 增量重编（不再吞错误，暴露真实失败点）──
           echo "═══ Round 2: rebuild ═══"
           make CONF=${{ env.CONF }} buildroot-rebuild 2>&1
