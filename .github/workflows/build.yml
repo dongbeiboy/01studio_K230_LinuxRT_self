@@ -564,13 +564,14 @@ jobs:
           rm -f /tmp/ci_test.c /tmp/ci_test /tmp/ci_test.err
           echo "✅ wrapper re-fixed after Round 1"
           # ── 手动从真实工具链复制 target 库（替代被 patch 跳过的步骤）──
-          echo "📦 Copying target libs from real toolchain sysroot..."
+          echo "📦 Copying target libs from STAGING_DIR..."
           TARGET_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/lib"
           TARGET_USR_LIB="output/${{ env.CONF }}/little/buildroot-ext/target/usr/lib"
           mkdir -p "$TARGET_LIB" "$TARGET_USR_LIB"
-          TC_SYSROOT="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot"
-          rsync -a "$TC_SYSROOT/lib64/lp64d/"*.so* "$TARGET_LIB/"
-          rc1=$?; rsync -a "$TC_SYSROOT/usr/lib64/lp64d/"*.so* "$TARGET_USR_LIB/"
+          STG_LIB="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot/lib"
+          STG_USR_LIB="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot/usr/lib"
+          rsync -a "$STG_LIB/"*.so* "$TARGET_LIB/"
+          rc1=$?; rsync -a "$STG_USR_LIB/"*.so* "$TARGET_USR_LIB/"
           rc2=$?
           if [ $rc1 -ne 0 ] || [ $rc2 -ne 0 ]; then
             echo "❌ FATAL: rsync target libs failed (lib=$rc1 usr/lib=$rc2)"; exit 1
