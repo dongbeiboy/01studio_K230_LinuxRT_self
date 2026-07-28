@@ -462,16 +462,16 @@ jobs:
           OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
-          # ── 清理 Xuantie-900 sysroot 中的符号链接环（防止 toolchain copy 步骤无限挂死）──
+          # ── Round 1: buildroot 全量跑（timeout 10min）──
+          echo "═══ Round 1: configure + extract (timeout 10min) ═══"
+          timeout 600 make CONF=${{ env.CONF }} buildroot 2>&1 || echo "⚠️ Round 1 timed out / failed (expected, proceeding to fixes)"
+          # ── 清理 sysroot 符号链接环（Round 1 的 toolchain-external-custom 刚创建完，防 Round 2 再挂）──
           XT_SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
           if [ -d "$XT_SYSROOT" ]; then
-            echo "🔍 Checking for symlink loops in Xuantie sysroot..."
+            echo "🔍 Checking for symlink loops in toolchain sysroot..."
             find -L "$XT_SYSROOT" -xtype l -delete 2>/dev/null || true
             echo "✅ Symlink cleanup done"
           fi
-          # ── Round 1: buildroot 全量跑（timeout 10min，toolchain copy 可能挂死）──
-          echo "═══ Round 1: configure + extract (timeout 10min) ═══"
-          timeout 600 make CONF=${{ env.CONF }} buildroot 2>&1 || echo "⚠️ Round 1 timed out / failed (expected, proceeding to fixes)"
           # ── Patch m4 SIGSTKSZ (glibc 2.35) ──
           M4F="$OUT/host-m4-1.4.18/lib/c-stack.c"
           if [ -f "$M4F" ]; then
