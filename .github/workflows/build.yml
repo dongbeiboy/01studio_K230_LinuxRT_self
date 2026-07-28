@@ -154,7 +154,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -285,7 +285,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -437,7 +437,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -475,10 +475,11 @@ jobs:
             echo "✅ m4 SIGSTKSZ patch installed to $M4PATCHDIR"
           fi
           # ── 给 pkg-generic.mk 的 "Fixing libtool files" 加进度显示 ──
+          # 用 printf 生成真实 tab 防止 YAML/heredoc 的 tab 冲突
           PKG_GEN_MK="$(ls src/little/buildroot-ext/buildroot-*/package/pkg-generic.mk 2>/dev/null | head -1)"
           if [ -f "$PKG_GEN_MK" ]; then
-            # $$$$ → Make sees $$ → shell sees $ (command substitution)
-            sed -i '/Fixing libtool files/a\\t@echo "  .la files to fix: $$$$(find $$$$(STAGING_DIR)/usr/lib* -name \"*.la\" 2>/dev/null | wc -l)"' "$PKG_GEN_MK"
+            TAB="$(printf '\t')"
+            sed -i "/Fixing libtool files/i\\${TAB}@echo \"  .la files to fix:\"; find \$(STAGING_DIR)/usr/lib* -name '*.la' 2>/dev/null | wc -l" "$PKG_GEN_MK"
             echo "✅ pkg-generic.mk progress display patched"
           fi
           # stub check-bin-arch: watchdog 抓到 readelf -h 在 target 文件上用户态卡死 (wchan=0)
@@ -718,7 +719,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v8
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v9
 
       - name: Prepare output structure
         run: mkdir -p output/${{ env.CONF }}/images
