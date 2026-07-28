@@ -506,12 +506,17 @@ jobs:
           echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
           # ── Round 1: buildroot 全量跑 + 背景进程追踪 ──
           echo "═══ Round 1: configure + extract ═══"
-          # 背景 watchdog: 每30秒抓进程堆栈，挂了能立刻定位
+          # 背景 watchdog: 每30秒抓进程堆栈 + 打开的文件描述符（精准定位卡在哪个文件）
           (
             sleep 120
             while true; do
-              for p in $(pgrep -f 'readlink|find.*sysroot|readelf' 2>/dev/null); do
-                echo "🔍 [watchdog] PID=$p wchan=$(cat /proc/$p/wchan 2>/dev/null) cmd=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null)"
+              for p in $(pgrep -f 'readlink|find.*sysroot|readelf|stat.*sysroot' 2>/dev/null); do
+                WCHAN=$(cat /proc/$p/wchan 2>/dev/null || echo "n/a")
+                CMD=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null || echo "n/a")
+                ETIME=$(ps -o etime= -p $p 2>/dev/null | xargs || echo "n/a")
+                FDS=$(ls -la /proc/$p/fd/ 2>/dev/null | tail -5 || echo "n/a")
+                echo "🔍 [watchdog] PID=$p alive=$ETIME wchan=$WCHAN cmd=$CMD"
+                echo "   open fds: $FDS"
               done
               sleep 30
             done
@@ -520,8 +525,12 @@ jobs:
           timeout 1800 make CONF=${{ env.CONF }} buildroot 2>&1
           RC=$?; kill $WATCHDOG_PID 2>/dev/null || true
           if [ $RC -eq 124 ]; then
-            echo "⚠️ Round 1 30min timeout — dumping process tree"
-            ps -ef --forest 2>/dev/null || true
+            echo "⚠️ Round 1 30min timeout — dumping stuck processes"
+            for p in $(ps -eo pid,etime,args --no-headers 2>/dev/null | grep -E 'readlink|find|readelf|stat|cp ' | awk '{print $1}'); do
+              echo "  PID=$p wchan=$(cat /proc/$p/wchan 2>/dev/null || echo n/a) cmd=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null)"
+              echo "  open fds:"; ls -la /proc/$p/fd/ 2>/dev/null | tail -10 || echo "  n/a"
+            done
+            ps -ef --forest 2>/dev/null | tail -30 || true
           elif [ $RC -ne 0 ]; then
             echo "⚠️ Round 1 non-zero exit (may be expected — config warnings, etc.)"
           fi
