@@ -564,23 +564,20 @@ jobs:
             rm -f "$OUT/host-m4-1.4.18/.stamp_built"
             echo "✅ patched m4"
           fi
-          # ── 修复 buildroot 交叉编译器 wrapper（模拟原生 wrapper 行为）──
+          # ── 修复 buildroot 交叉编译器 wrapper（无条件：即使 dir 不存在也建）──
           WRAP="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           REAL="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin/riscv64-unknown-linux-gnu"
           SYSROOT="$(pwd)/output/${{ env.CONF }}/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
-          if [ -d "$WRAP" ] && [ -f "$REAL-gcc" ] && [ -d "$SYSROOT" ]; then
-            # 编译器 (gcc/g++/cpp): 传入 --sysroot -mabi -march（模拟 toolchain-wrapper）
-            for tool in gcc g++ cpp; do
-              W="$WRAP/riscv64-unknown-linux-gnu-$tool"
-              [ -f "$W" ] && printf '#!/bin/sh\nexec %s-%s --sysroot "%s" -mabi=lp64d -march=rv64imafdcxthead "$@"\n' "$REAL" "$tool" "$SYSROOT" > "$W" && chmod +x "$W"
-            done
-            # 其余工具(binutils): 简单 passthrough
-            for tool in ld ar as nm ranlib strip objcopy objdump readelf; do
-              W="$WRAP/riscv64-unknown-linux-gnu-$tool"
-              [ -f "$W" ] && printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$W" && chmod +x "$W"
-            done
-            echo "✅ cross-compiler wrappers fixed (sysroot+mabi+march for gcc/g++/cpp)"
-          fi
+          mkdir -p "$WRAP"
+          for tool in gcc g++ cpp; do
+            printf '#!/bin/sh\nexec %s-%s --sysroot "%s" -mabi=lp64d -march=rv64imafdcxthead "$@"\n' "$REAL" "$tool" "$SYSROOT" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
+            chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
+          done
+          for tool in ld ar as nm ranlib strip objcopy objdump readelf; do
+            printf '#!/bin/sh\nexec %s-%s "$@"\n' "$REAL" "$tool" > "$WRAP/riscv64-unknown-linux-gnu-$tool"
+            chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
+          done
+          echo "✅ cross-compiler wrappers fixed (sysroot+mabi+march)"
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
