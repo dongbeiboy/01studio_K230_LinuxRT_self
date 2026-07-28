@@ -485,7 +485,6 @@ jobs:
           fi
           # ── 替换整个 INSTALL_TARGET_CMDS 为 no-op ──
           # exit 0 在 make define 中不起作用（每行独立 fork shell）
-          # 正确做法：删除 define...endef 全部内容，重写为空操作
           DEF_LINE=$(grep -n 'define.*_INSTALL_TARGET_CMDS' "$BR_PKG_MK" | head -1 | cut -d: -f1)
           END_LINE=$(tail -n +$DEF_LINE "$BR_PKG_MK" | grep -n '^endef' | head -1 | cut -d: -f1)
           [ -z "$DEF_LINE" ] || [ -z "$END_LINE" ] && { echo "❌ FATAL: cannot find define/endef bounds"; exit 1; }
@@ -494,8 +493,9 @@ jobs:
               <(printf '%s\n' "define TOOLCHAIN_EXTERNAL_INSTALL_TARGET_CMDS" "	@echo \"CI: target install skipped\"" "endef") \
               <(tail -n +$((END_LINE + 1)) "$BR_PKG_MK") > "$BR_PKG_MK.tmp"
           mv "$BR_PKG_MK.tmp" "$BR_PKG_MK"
-          if grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS\|TOOLCHAIN_EXTERNAL_INSTALL_TARGET_GDBSERVER' "$BR_PKG_MK"; then
-            echo "❌ FATAL: target install hooks still present after rewrite"; exit 1
+          # 校验：rewrite 后的 define 块中不含旧的 hook 调用
+          if sed -n '/define.*_INSTALL_TARGET_CMDS/,/^endef/p' "$BR_PKG_MK" | grep -q 'INSTALL_TARGET_LIBS\|INSTALL_TARGET_GDBSERVER\|INSTALL_TARGET_LDD\|INSTALL_TARGET_LIB_SYMLINK\|FIXUP_UCLIBCNG'; then
+            echo "❌ FATAL: target install hooks still in CMDS define after rewrite"; exit 1
           fi
           echo "✅ patched buildroot pkg-toolchain-external.mk (bypassed target libs copy)"
           # ── Round 1: buildroot 全量跑（挂死步骤已 patch 掉）──
