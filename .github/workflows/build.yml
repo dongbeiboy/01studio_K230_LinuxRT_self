@@ -578,6 +578,21 @@ jobs:
             chmod +x "$WRAP/riscv64-unknown-linux-gnu-$tool"
           done
           echo "✅ cross-compiler wrappers fixed (sysroot+mabi+march)"
+          # 自检：wrapper 能否编译成功
+          printf 'int main(){return 0;}\n' > /tmp/ci_test_wrapper.c
+          if "$WRAP/riscv64-unknown-linux-gnu-gcc" /tmp/ci_test_wrapper.c -o /tmp/ci_test_wrapper 2>/tmp/ci_test_wrapper.err; then
+            echo "✅ wrapper self-test passed"
+            rm -f /tmp/ci_test_wrapper.c /tmp/ci_test_wrapper /tmp/ci_test_wrapper.err
+          else
+            echo "❌ wrapper self-test FAILED"
+            echo "  gcc: $(file "$REAL-gcc" 2>/dev/null || echo missing)"
+            echo "  wrapper: $(file "$WRAP/riscv64-unknown-linux-gnu-gcc" 2>/dev/null || echo missing)"
+            echo "  sysroot: $(ls -d "$SYSROOT" 2>/dev/null || echo missing)"
+            echo "  crt1.o: $(find "$SYSROOT" -name crt1.o 2>/dev/null | head -1 || echo missing)"
+            echo "  gcc stderr:"; cat /tmp/ci_test_wrapper.err
+            rm -f /tmp/ci_test_wrapper.c /tmp/ci_test_wrapper /tmp/ci_test_wrapper.err
+            exit 1
+          fi
           # ── Stub makedevs + 删 cpio.mk mknod ──
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
             mv "$FB/makedevs" "$FB/makedevs.real"
