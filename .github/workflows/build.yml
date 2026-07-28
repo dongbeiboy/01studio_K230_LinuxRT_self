@@ -154,7 +154,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v11
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -285,7 +285,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v11
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -437,7 +437,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v11
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -468,27 +468,18 @@ jobs:
           [ -d "$BRW_DIR/package/m4" ] && cp .github/patches/0003-fix-m4-sigstksz.patch "$BRW_DIR/package/m4/"
           > "$BRW_DIR/support/scripts/check-bin-arch" printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n'
           echo "✅ patches installed"
-          # ── 3. 修复工具链 sysroot: 删掉 broken symlinks ──
-          # Xuantie-900 多架构 sysroot 里的某些 symlink 目标不存在，
-          # buildroot 的 copy_toolchain_lib_root 调用 readlink -f 会永久卡死。
-          # 直接删掉这些 broken symlink，让 buildroot 原生流程正常工作。
-          TSYS="/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/riscv64-unknown-linux-gnu/sysroot"
-          BAD=$(find "$TSYS" -xtype l 2>/dev/null | wc -l)
-          if [ "$BAD" -gt 0 ]; then
-            echo "🔧 Removing $BAD broken symlinks from toolchain sysroot..."
-            find "$TSYS" -xtype l -delete 2>/dev/null
-            REMAIN=$(find "$TSYS" -xtype l 2>/dev/null | wc -l)
-            echo "✅ broken symlinks: $BAD → $REMAIN"
-          else
-            echo "✅ no broken symlinks"
-          fi
-          # ── 4. cpio.mk 去 mknod ──
+          # ── 3. Xuantie-900 修复：helpers.mk 中 readlink -f 在 multilib
+          #    sysroot 的相对符号链接上无限循环。readlink -m 同样解析路径
+          #    但不校验目标存在性，不会卡住。──
+          sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
+          echo "✅ helpers.mk: readlink -f → readlink -m"
+          # cpio.mk 去 mknod
           sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
           echo "✅ cpio mknod disabled"
-          # ── 5. 单次 buildroot ──
+          # ── 4. 单次 buildroot ──
           echo "═══ buildroot ═══"
           timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
-          # ── 6. 收尾 ──
+          # ── 5. 收尾 ──
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
           if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
@@ -577,7 +568,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v10
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v11
 
       - name: Prepare output structure
         run: mkdir -p output/${{ env.CONF }}/images
