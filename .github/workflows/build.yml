@@ -470,6 +470,12 @@ jobs:
             cp .github/patches/0003-fix-m4-sigstksz.patch "$M4PATCHDIR/"
             echo "✅ m4 SIGSTKSZ patch installed to $M4PATCHDIR"
           fi
+          # ── 给 pkg-generic.mk 的 "Fixing libtool files" 加进度显示 ──
+          PKG_GEN_MK="$(ls src/little/buildroot-ext/buildroot-*/package/pkg-generic.mk 2>/dev/null | head -1)"
+          if [ -f "$PKG_GEN_MK" ]; then
+            sed -i '/Fixing libtool files/a\\t@echo "  .la files to fix: $$(find $$(STAGING_DIR)/usr/lib* -name \"*.la\" 2>/dev/null | wc -l)"' "$PKG_GEN_MK"
+            echo "✅ pkg-generic.mk progress display patched"
+          fi
           OUT="output/${{ env.CONF }}/little/buildroot-ext/build"
           FB="output/${{ env.CONF }}/little/buildroot-ext/host/bin"
           CPIO="output/${{ env.CONF }}/little/buildroot-ext/images/rootfs.cpio"
