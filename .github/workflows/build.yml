@@ -497,9 +497,13 @@ jobs:
           n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
           [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
           echo "✅ staging pre-populated ($n libc found)"
-          # ── 4. 强制再生 .config（旧缓存可能残留不完整配置）──
+          # ── 4. 确保 .config 包含 THEAD ──
+          # k230_evb_defconfig 不含 THEAD（由 SDK Kconfig 合并），
+          # 旧缓存 .config 可能也缺失。直接写入 defconfig 源码 + 删旧 .config。
+          DEFC="$BRW_DIR/configs/k230_evb_defconfig"
+          grep -q 'BR2_RISCV_ISA_CUSTOM_THEAD=y' "$DEFC" || echo "BR2_RISCV_ISA_CUSTOM_THEAD=y" >> "$DEFC"
           rm -f "output/${{ env.CONF }}/little/buildroot-ext/.config"
-          echo "✅ old .config removed, will regenerate from defconfig"
+          echo "✅ THEAD ensured in defconfig, old .config removed"
           # ── 5. 单次 buildroot ──
           echo "═══ buildroot ═══"
           timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
