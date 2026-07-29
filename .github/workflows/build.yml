@@ -127,7 +127,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -143,7 +143,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF), '.github/patches/**') }}-v13
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -233,7 +233,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -249,7 +249,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF), '.github/patches/**') }}-v13
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -360,7 +360,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
@@ -376,7 +376,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF), '.github/patches/**') }}-v13
 
       - name: Mark toolchain ready (cache hit)
         if: steps.cache-tc.outputs.cache-hit == 'true'
@@ -414,14 +414,16 @@ jobs:
   merge:
     name: "打包镜像  ${{ matrix.conf }}"
     if: |
-      (github.ref_type == 'tag' && (
-        contains(github.ref_name, '-full') ||
-        !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
-      ))
-      ||
-      (github.event_name == 'workflow_dispatch' && (
-        github.event.inputs.target == 'full' || github.event.inputs.target == 'pack'
-      ))
+      always() &&
+      (
+        (github.ref_type == 'tag' && (
+          contains(github.ref_name, '-full') ||
+          !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
+        )) ||
+        (github.event_name == 'workflow_dispatch' && (
+          github.event.inputs.target == 'full' || github.event.inputs.target == 'pack'
+        ))
+      )
     needs: [build-big, build-little, build-rootfs]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -463,7 +465,7 @@ jobs:
             src/little/buildroot-ext/dl
             src/little/buildroot-ext/package/tuning-server
             src/little/buildroot-ext/buildroot-*
-          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}', '.github/patches/**') }}-v13
+          key: sources-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF), '.github/patches/**') }}-v13
 
       - name: Prepare output structure
         run: mkdir -p output/${{ env.CONF }}/images
@@ -472,7 +474,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchain
-          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', 'configs/${{ env.CONF }}') }}-v4
+          key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Link toolchain to /opt/toolchain
         run: |
@@ -547,12 +549,14 @@ jobs:
   release:
     name: GitHub Release
     if: |
-      (github.ref_type == 'tag' && (
-        contains(github.ref_name, '-full') ||
-        !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
-      ))
-      ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'full')
+      always() &&
+      (
+        (github.ref_type == 'tag' && (
+          contains(github.ref_name, '-full') ||
+          !(contains(github.ref_name, '-big') || contains(github.ref_name, '-little') || contains(github.ref_name, '-rootfs') || contains(github.ref_name, '-pack'))
+        )) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'full')
+      )
     needs: merge
     runs-on: ubuntu-22.04
     permissions:
