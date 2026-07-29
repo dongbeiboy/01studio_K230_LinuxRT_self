@@ -23,17 +23,23 @@ printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/sup
 echo "✅ patches installed"
 
 # ── 3. 删掉 wrapper 的 -march 参数 ──
-# 工具链默认 march=rv64imafdc_xtheadc，不需要 wrapper 传 -march。
-# buildroot 往 wrapper 传了 -march=rv64imafdc（缺 xthead），
-# 反而把编译器默认的正确值覆盖了，导致 vg_lite 汇编失败。
+# ── 3. 修复 toolchain wrapper：移除 BR_ARCH，保留 CFLAGS ──
+# 工具链默认 march=rv64imafdc_xtheadc。buildroot wrapper 通过
+# -DBR_ARCH 注入了 -march=rv64imafdc（缺 xthead），覆盖了编译器默认值，
+# 导致 vg_lite 汇编失败。
+#
+# TOOLCHAIN_EXTERNAL_CFLAGS（含 -march）不能删：它被
+# toolchain_find_libdir 用于解析 multilib 目录（lib64/lp64d）。
+# 删除后编译器回退到默认 rv64imafdc_xtheadc，libdir 变成
+# lib64xthead/lp64d，target install 阶段因目录结构不存在而失败。
+#
+# 正确做法：只删 wrapper 的 BR_ARCH 注入，让编译器用默认 xthead；
+# 同时保留 TOOLCHAIN_EXTERNAL_CFLAGS.-march=rv64imafdc 用于 libdir 解析。
 PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
-sed -i '/^TOOLCHAIN_EXTERNAL_CFLAGS.*march/d' "$PKG_MK"
 sed -i '/DBR_ARCH/d' "$PKG_MK"
-# GCC_TARGET_ARCH 仍可能通过 ifeq 获得 xthead 后缀，buildroot
-# 会根据它创建 multilib 目录。需要同时限制为不带 xthead 的值。
 echo 'GCC_TARGET_ARCH := rv64imafdc' >> "$BRW_DIR/arch/arch.mk.riscv"
 rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ BR_ARCH removed + GCC_TARGET_ARCH capped, old .config deleted"
+echo "✅ BR_ARCH removed (wrapper won't inject -march), libdir stays lib64/lp64d"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
 sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
