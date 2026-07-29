@@ -91,10 +91,12 @@
     status = "okay";
 
     panel@0 {
-        compatible = "canaan,hx8399";
+        compatible = "sitronix,st7701-800x480";
         reg = <0>;
         reset-gpios = <&port24 0 GPIO_ACTIVE_HIGH>;
         backlight-gpios = <&port25 0 GPIO_ACTIVE_HIGH>;
+        panel-width-mm = <108>;
+        panel-height-mm = <65>;
 
         display-timings {
             timing-0 {
@@ -110,29 +112,4 @@
             };
         };
     };
-};
-
-&dsi {
-	status = "okay";
-
-	panel@0 {
-		compatible = "canaan,hx8399";
-		reg = <0>;
-		panel-width-mm = <70>;
-		panel-height-mm = <121>;
-
-		display-timings {
-			timing-0 {
-				clock-frequency = <30000000>;
-				hactive = <800>;
-				vactive = <480>;
-				hfront-porch = <40>;
-				hback-porch = <40>;
-				hsync-len = <48>;
-				vfront-porch = <13>;
-				vback-porch = <32>;
-				vsync-len = <3>;
-			};
-		};
-	};
 };

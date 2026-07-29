@@ -151,6 +151,9 @@ int main(int argc, char *argv[])
     case DISPALY_VO_ST7701_480x800_TEST :
         sample_connector_osd_install_frame(ST7701_V1_MIPI_2LAN_480X800_30FPS);
         break;
+    case DISPALY_VO_ST7701_800x480_TEST :
+        sample_connector_osd_install_frame(ST7701_V1_MIPI_2LAN_800X480_30FPS);
+        break;
     case DISPALY_VO_WRITEBACK_TEST :
         // sample_connector_wbc_dump_frame(HX8377_V2_MIPI_4LAN_1080X1920_30FPS);
         break;

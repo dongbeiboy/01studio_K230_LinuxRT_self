@@ -310,6 +310,25 @@ static const struct drm_display_mode ts8550b_mode = {
 	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
 };
 
+static const struct drm_display_mode st7701_800x480_mode = {
+	.clock		= 30000,
+
+	.hdisplay	= 800,
+	.hsync_start	= 800 + 40,
+	.hsync_end	= 800 + 40 + 48,
+	.htotal		= 800 + 40 + 48 + 40,
+
+	.vdisplay	= 480,
+	.vsync_start	= 480 + 32,
+	.vsync_end	= 480 + 32 + 3,
+	.vtotal		= 480 + 32 + 3 + 13,
+
+	.width_mm	= 108,
+	.height_mm	= 65,
+
+	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+};
+
 static const char * const ts8550b_supply_names[] = {
 	"VCC",
 	"IOVCC",
@@ -323,6 +342,21 @@ static const struct st7701_panel_desc ts8550b_desc = {
 	.supply_names = ts8550b_supply_names,
 	.num_supplies = ARRAY_SIZE(ts8550b_supply_names),
 	.panel_sleep_delay = 80, /* panel need extra 80ms for sleep out cmd */
+};
+
+static const char * const st7701_800x480_supply_names[] = {
+	"VCC",
+	"IOVCC",
+};
+
+static const struct st7701_panel_desc st7701_800x480_desc = {
+	.mode = &st7701_800x480_mode,
+	.lanes = 2,
+	.flags = MIPI_DSI_MODE_VIDEO,
+	.format = MIPI_DSI_FMT_RGB888,
+	.supply_names = st7701_800x480_supply_names,
+	.num_supplies = ARRAY_SIZE(st7701_800x480_supply_names),
+	.panel_sleep_delay = 80,
 };
 
 static int st7701_dsi_probe(struct mipi_dsi_device *dsi)
@@ -399,6 +433,7 @@ static int st7701_dsi_remove(struct mipi_dsi_device *dsi)
 
 static const struct of_device_id st7701_of_match[] = {
 	{ .compatible = "techstar,ts8550b", .data = &ts8550b_desc },
+	{ .compatible = "sitronix,st7701-800x480", .data = &st7701_800x480_desc },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, st7701_of_match);

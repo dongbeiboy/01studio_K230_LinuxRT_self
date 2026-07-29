@@ -47,7 +47,7 @@ using namespace nncase::runtime::detail;
 
 #define CHANNEL 3
 
-#if defined(CONFIG_BOARD_K230_CANMV) || defined(CONFIG_BOARD_K230_CANMV_V2) || defined(CONFIG_BOARD_K230_CANMV_01STUDIO)
+#if defined(CONFIG_BOARD_K230_CANMV) || defined(CONFIG_BOARD_K230_CANMV_V2)
 #define ISP_CHN1_HEIGHT (720)
 #define ISP_CHN1_WIDTH  (1280)
 #define ISP_CHN0_WIDTH  (1920)
@@ -58,6 +58,18 @@ using namespace nncase::runtime::detail;
 
 #define LCD_WIDTH       (1080)
 #define LCD_HEIGHT      (1920)
+
+#elif defined(CONFIG_BOARD_K230_CANMV_01STUDIO)
+#define ISP_CHN1_HEIGHT (480)
+#define ISP_CHN1_WIDTH  (800)
+#define ISP_CHN0_WIDTH  (800)
+#define ISP_CHN0_HEIGHT (480)
+
+#define ISP_INPUT_WIDTH (1920)
+#define ISP_INPUT_HEIGHT (1080)
+
+#define LCD_WIDTH       (800)
+#define LCD_HEIGHT      (480)
 
 #elif defined(CONFIG_BOARD_K230D_CANMV) || defined(CONFIG_BOARD_K230_CANMV_DONGSHANPI) || defined(CONFIG_BOARD_K230D_CANMV_BPI) || defined(CONFIG_BOARD_K230_CANMV_LCKFB)
 #define ISP_CHN1_HEIGHT (720)
@@ -303,8 +315,10 @@ k_s32 sample_connector_init(void)
 {
     k_u32 ret = 0;
     k_s32 connector_fd;
-#if defined(CONFIG_BOARD_K230_CANMV) || defined(CONFIG_BOARD_K230_CANMV_V2) || defined(CONFIG_BOARD_K230_CANMV_01STUDIO)
+#if defined(CONFIG_BOARD_K230_CANMV) || defined(CONFIG_BOARD_K230_CANMV_V2)
 	k_connector_type connector_type = LT9611_MIPI_4LAN_1920X1080_30FPS;// HX8377_V2_MIPI_4LAN_1080X1920_30FPS;
+#elif defined(CONFIG_BOARD_K230_CANMV_01STUDIO)
+    k_connector_type connector_type = ST7701_V1_MIPI_2LAN_800X480_30FPS;
 #elif defined(CONFIG_BOARD_K230D_CANMV) || defined(CONFIG_BOARD_K230D_CANMV_BPI) || defined(CONFIG_BOARD_K230_CANMV_LCKFB)
     k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X800_30FPS;
 #elif defined(CONFIG_BOARD_K230_CANMV_DONGSHANPI)

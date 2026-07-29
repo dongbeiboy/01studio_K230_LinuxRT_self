@@ -562,6 +562,8 @@ int main(int argc, char *argv[])
                 connector_type = LT9611_MIPI_4LAN_1920X1080_30FPS;
             }else if (conn == 3) {
                 connector_type = ST7701_V1_MIPI_2LAN_480X800_30FPS;
+            } else if (conn == 5) {
+                connector_type = ST7701_V1_MIPI_2LAN_800X480_30FPS;
             } else if(conn == 4) {
                 connector_type = ILI9806_MIPI_2LAN_480X800_30FPS;
             } else {
