@@ -120,18 +120,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
-            cmake flex bison m4 fakeroot attr zlib1g-dev \
-            bc cpio unzip rsync file make binutils build-essential \
-            gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
-            autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
-            libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
-            python3 python3-pip python-is-python3 scons wget curl ccache
-          pip3 install pycryptodome gmssl
-
+        run: bash .github/scripts/install-deps.sh
 
       - name: Restore toolchain cache
         id: cache-tc
@@ -250,19 +239,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies
-        run: |
-          ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
-            cmake flex bison m4 fakeroot attr zlib1g-dev \
-            bc cpio unzip rsync file make binutils build-essential \
-            gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
-            autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
-            libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
-            python3 python3-pip python-is-python3 scons wget curl ccache
-          pip3 install pycryptodome gmssl
-
+        run: bash .github/scripts/install-deps.sh
 
       - name: Restore toolchain cache
         id: cache-tc
@@ -402,19 +379,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies
-        run: |
-          ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
-            cmake flex bison m4 fakeroot attr zlib1g-dev \
-            bc cpio unzip rsync file make binutils build-essential \
-            gcc g++ bash patch gzip bzip2 perl tar dosfstools mtools \
-            autoconf automake pkg-config libc6-dev-i386 libncurses5:i386 \
-            libssl-dev libncurses5-dev libconfuse2 libconfuse-dev \
-            python3 python3-pip python-is-python3 scons wget curl
-          pip3 install pycryptodome gmssl
-
+        run: bash .github/scripts/install-deps.sh
 
       - name: Restore toolchain cache
         id: cache-tc
