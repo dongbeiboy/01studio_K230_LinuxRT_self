@@ -22,16 +22,24 @@ cp .github/patches/0002-fix-stat-ver-glibc235.patch "$BRW_DIR/package/fakeroot/"
 printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
 echo "✅ patches installed"
 
-# ── 3. (已移除) -march/DBR_ARCH 操作 ──
-# 此处原本试图阻止 wrapper 注入 -march=rv64imafdc（缺 xthead），
-# 声称会导致 vg_lite 汇编失败。事实上本地 make buildroot 天天
-# 用同一套工具链和同一套 -march=rv64imafdc，从未因此炸过。
-# 而这个 sed 反而把 TOOLCHAIN_EXTERNAL_CFLAGS 里的 -march 也删了，
-# 导致 toolchain_find_libdir 解析出 lib64xthead/lp64d，
-# 符号链接创建失败。结论：画蛇添足，不留。
+# ── 3. 修复 toolchain wrapper：删 DBR_ARCH，保留 TOOLCHAIN_EXTERNAL_CFLAGS ──
+# 问题：buildroot wrapper 通过 -DBR_ARCH 注入 -march=rv64imafdc（缺 xthead），
+# vg_lite 的 dcache.civa 等 C908 自定义指令需要 xthead 扩展，汇编失败：
+#   ../inc/c908_cache.h:18: Error: unrecognized opcode `dcache.civa a5'
+#
+# 调用链分析：
+#   ① TOOLCHAIN_EXTERNAL_CFLAGS += -march=rv64imafdc  ← 用于 libdir 解析（必须保留）
+#   ② -DBR_ARCH='rv64imafdc' → wrapper 注入 -march  ← 覆盖编译器默认 xthead（必须删除）
+#
+# 修复：只删 ② 的 DBR_ARCH 行，wrapper 不注入 -march，
+# 编译器回退到默认 rv64imafdc_xtheadc（vg_lite 汇编通过）。
+# TOOLCHAIN_EXTERNAL_CFLAGS 保留不变（toolchain_find_libdir → lib64/lp64d）。
+PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
+sed -i '/^TOOLCHAIN_EXTERNAL_TOOLCHAIN_WRAPPER_ARGS += -DBR_ARCH/d' "$PKG_MK"
+rm -f "output/$CONF/little/buildroot-ext/.config"
+echo "✅ DBR_ARCH removed; compiler default xthead restored; CFLAGS untouched for libdir"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
-PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
 sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
 sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
 echo "✅ copy_toolchain_lib_root bypassed"
