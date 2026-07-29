@@ -478,9 +478,11 @@ jobs:
           sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
           echo "✅ helpers.mk: readlink -f → readlink -m"
           # toolchain-wrapper 的 BR_ARCH 缺 _xtheadc（Xuantie 扩展），
-          # 导致编译 vg_lite 等包时 as 不认识 dcache.civa 等指令
-          sed -i 's/rv64imafdc/rv64imafdc_xtheadc/g' "$PKG_MK"
-          echo "✅ pkg-toolchain-external.mk: BR_ARCH +_xtheadc"
+          # 导致编译 vg_lite 等包时 as 不认识 dcache.civa 等指令。
+          # GCC_TARGET_ARCH 来自 buildroot config(rv64imafdc)，mk 文件里没有字面值。
+          # 在 $(GCC_TARGET_ARCH) 后面追加 _xtheadc。
+          sed -i 's/\$(GCC_TARGET_ARCH)/$(GCC_TARGET_ARCH)_xtheadc/g' "$PKG_MK"
+          echo "✅ pkg-toolchain-external.mk: GCC_TARGET_ARCH +_xtheadc"
           # cpio.mk 去 mknod
           sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
           echo "✅ cpio mknod disabled"
