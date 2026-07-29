@@ -22,26 +22,16 @@ cp .github/patches/0002-fix-stat-ver-glibc235.patch "$BRW_DIR/package/fakeroot/"
 printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
 echo "✅ patches installed"
 
-# ── 3. 删掉 wrapper 的 -march 参数 ──
-# ── 3. 修复 toolchain wrapper：移除 BR_ARCH，保留 CFLAGS ──
-# 工具链默认 march=rv64imafdc_xtheadc。buildroot wrapper 通过
-# -DBR_ARCH 注入了 -march=rv64imafdc（缺 xthead），覆盖了编译器默认值，
-# 导致 vg_lite 汇编失败。
-#
-# TOOLCHAIN_EXTERNAL_CFLAGS（含 -march）不能删：它被
-# toolchain_find_libdir 用于解析 multilib 目录（lib64/lp64d）。
-# 删除后编译器回退到默认 rv64imafdc_xtheadc，libdir 变成
-# lib64xthead/lp64d，target install 阶段因目录结构不存在而失败。
-#
-# 正确做法：只删 wrapper 的 BR_ARCH 注入，让编译器用默认 xthead；
-# 同时保留 TOOLCHAIN_EXTERNAL_CFLAGS.-march=rv64imafdc 用于 libdir 解析。
-PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
-sed -i '/DBR_ARCH/d' "$PKG_MK"
-echo 'GCC_TARGET_ARCH := rv64imafdc' >> "$BRW_DIR/arch/arch.mk.riscv"
-rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ BR_ARCH removed (wrapper won't inject -march), libdir stays lib64/lp64d"
+# ── 3. (已移除) -march/DBR_ARCH 操作 ──
+# 此处原本试图阻止 wrapper 注入 -march=rv64imafdc（缺 xthead），
+# 声称会导致 vg_lite 汇编失败。事实上本地 make buildroot 天天
+# 用同一套工具链和同一套 -march=rv64imafdc，从未因此炸过。
+# 而这个 sed 反而把 TOOLCHAIN_EXTERNAL_CFLAGS 里的 -march 也删了，
+# 导致 toolchain_find_libdir 解析出 lib64xthead/lp64d，
+# 符号链接创建失败。结论：画蛇添足，不留。
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
+PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
 sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
 sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
 echo "✅ copy_toolchain_lib_root bypassed"
