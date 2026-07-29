@@ -26,13 +26,13 @@ echo "✅ patches installed"
 # 工具链默认 march=rv64imafdc_xtheadc，不需要 wrapper 传 -march。
 # buildroot 往 wrapper 传了 -march=rv64imafdc（缺 xthead），
 # 反而把编译器默认的正确值覆盖了，导致 vg_lite 汇编失败。
+PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
 sed -i '/^TOOLCHAIN_EXTERNAL_CFLAGS.*march/d' "$PKG_MK"
-sed -i "/DBR_ARCH/d" "$PKG_MK"
+sed -i '/DBR_ARCH/d' "$PKG_MK"
 rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ wrapper -march removed (use compiler default = rv64imafdc_xtheadc)"
+echo "✅ TOOLCHAIN_EXTERNAL_CFLAGS -march + BR_ARCH removed, old .config deleted"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
-PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
 sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
 sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
 echo "✅ copy_toolchain_lib_root bypassed"
@@ -56,18 +56,14 @@ n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
 [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
 echo "✅ staging pre-populated ($n libc found)"
 
-# ── 7. 强制再生 .config ──
-rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ old .config removed"
-
-# ── 8. 验证 + 构建 ──
+# ── 7. 验证 + 构建 ──
 echo "=== PRE-BUILD CHECK ==="
 echo "last 3 lines of arch.mk.riscv:"
 tail -3 "$BRW_DIR/arch/arch.mk.riscv"
 echo "═══ buildroot ═══"
 timeout 2700 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
 
-# ── 9. 收尾 ──
+# ── 8. 收尾 ──
 FB="output/$CONF/little/buildroot-ext/host/bin"
 CPIO="output/$CONF/little/buildroot-ext/images/rootfs.cpio"
 if [ -f "$FB/makedevs" ] && ! grep -q 'CI-NOOP' "$FB/makedevs" 2>/dev/null; then
