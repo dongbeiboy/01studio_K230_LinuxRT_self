@@ -157,20 +157,7 @@ jobs:
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
       - name: Setup ccache wrapper for RTT toolchain (musl)
-        run: |
-          echo "CCACHE_DIR=${{ github.workspace }}/.ccache-rtt" >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK=content"               >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=2G"                          >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=1"                          >> $GITHUB_ENV
-          TC_BIN=/opt/toolchain/riscv64-linux-musleabi_for_x86_64-pc-linux-gnu/bin
-          for prog in gcc g++ cc cpp; do
-            BIN="$TC_BIN/riscv64-unknown-linux-musl-$prog"
-            if [ -f "$BIN" ] && [ ! -f "$BIN.real" ]; then
-              sudo mv "$BIN" "$BIN.real"
-              printf '#!/bin/sh\nexec ccache %s "$@"\n' "$BIN.real" | sudo tee "$BIN" > /dev/null
-              sudo chmod +x "$BIN"
-            fi
-          done
+        run: bash .github/scripts/setup-ccache.sh '${{ github.workspace }}/.ccache-rtt' /opt/toolchain/riscv64-linux-musleabi_for_x86_64-pc-linux-gnu/bin riscv64-unknown-linux-musl
 
       - name: Restore ccache (rtt)
         uses: actions/cache/restore@v4
@@ -276,20 +263,7 @@ jobs:
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
       - name: Setup ccache wrapper for Linux toolchain
-        run: |
-          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK=content"       >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=2G"                  >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=1"                  >> $GITHUB_ENV
-          TC_BIN=/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin
-          for prog in gcc g++ cc cpp; do
-            BIN="$TC_BIN/riscv64-unknown-linux-gnu-$prog"
-            if [ -f "$BIN" ] && [ ! -f "$BIN.real" ]; then
-              sudo mv "$BIN" "$BIN.real"
-              printf '#!/bin/sh\nexec ccache %s "$@"\n' "$BIN.real" | sudo tee "$BIN" > /dev/null
-              sudo chmod +x "$BIN"
-            fi
-          done
+        run: bash .github/scripts/setup-ccache.sh '${{ github.workspace }}/.ccache' /opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin riscv64-unknown-linux-gnu
 
       - name: Restore ccache (linux)
         uses: actions/cache/restore@v4
