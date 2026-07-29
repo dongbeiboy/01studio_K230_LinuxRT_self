@@ -29,8 +29,11 @@ echo "✅ patches installed"
 PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
 sed -i '/^TOOLCHAIN_EXTERNAL_CFLAGS.*march/d' "$PKG_MK"
 sed -i '/DBR_ARCH/d' "$PKG_MK"
+# GCC_TARGET_ARCH 仍可能通过 ifeq 获得 xthead 后缀，buildroot
+# 会根据它创建 multilib 目录。需要同时限制为不带 xthead 的值。
+echo 'GCC_TARGET_ARCH := rv64imafdc' >> "$BRW_DIR/arch/arch.mk.riscv"
 rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ TOOLCHAIN_EXTERNAL_CFLAGS -march + BR_ARCH removed, old .config deleted"
+echo "✅ BR_ARCH removed + GCC_TARGET_ARCH capped, old .config deleted"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
 sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
