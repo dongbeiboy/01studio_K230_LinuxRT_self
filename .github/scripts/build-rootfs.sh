@@ -22,13 +22,14 @@ cp .github/patches/0002-fix-stat-ver-glibc235.patch "$BRW_DIR/package/fakeroot/"
 printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
 echo "✅ patches installed"
 
-# ── 3. 确保 Xuantie 扩展 ──
-# arch.mk.riscv 中 THEAD 是 ifeq 条件编译，依赖 .config 中
-# BR2_RISCV_ISA_THEAD=y（Kconfig 合并时可能丢失）。
-# Make 的 := 按解析顺序，最后赋值胜出。追加到文件末尾。
-echo 'GCC_TARGET_ARCH := rv64imafdcxthead' >> "$BRW_DIR/arch/arch.mk.riscv"
+# ── 3. 删掉 wrapper 的 -march 参数 ──
+# 工具链默认 march=rv64imafdc_xtheadc，不需要 wrapper 传 -march。
+# buildroot 往 wrapper 传了 -march=rv64imafdc（缺 xthead），
+# 反而把编译器默认的正确值覆盖了，导致 vg_lite 汇编失败。
+sed -i '/^TOOLCHAIN_EXTERNAL_CFLAGS.*march/d' "$PKG_MK"
+sed -i "/DBR_ARCH/d" "$PKG_MK"
 rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ GCC_TARGET_ARCH := rv64imafdcxthead (appended to arch.mk.riscv)"
+echo "✅ wrapper -march removed (use compiler default = rv64imafdc_xtheadc)"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
 PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
