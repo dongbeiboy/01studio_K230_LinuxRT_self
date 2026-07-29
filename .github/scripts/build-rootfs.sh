@@ -22,13 +22,13 @@ cp .github/patches/0002-fix-stat-ver-glibc235.patch "$BRW_DIR/package/fakeroot/"
 printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
 echo "✅ patches installed"
 
-# ── 3. 无条件启用 Xuantie 扩展 ──
-# arch.mk.riscv 的 THEAD 是 ifeq 条件编译，依赖 .config 中
+# ── 3. 确保 Xuantie 扩展 ──
+# arch.mk.riscv 中 THEAD 是 ifeq 条件编译，依赖 .config 中
 # BR2_RISCV_ISA_THEAD=y（Kconfig 合并时可能丢失）。
-# 直接删条件，无条件追加 xthead。
-sed -i 's/ifeq (\$(BR2_RISCV_ISA_THEAD),y)/ifeq (y,y)/' "$BRW_DIR/arch/arch.mk.riscv"
+# Make 的 := 按解析顺序，最后赋值胜出。追加到文件末尾。
+echo 'GCC_TARGET_ARCH := rv64imafdcxthead' >> "$BRW_DIR/arch/arch.mk.riscv"
 rm -f "output/$CONF/little/buildroot-ext/.config"
-echo "✅ arch.mk: xthead unconditional, old .config removed"
+echo "✅ GCC_TARGET_ARCH := rv64imafdcxthead (appended to arch.mk.riscv)"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
 PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
@@ -59,7 +59,10 @@ echo "✅ staging pre-populated ($n libc found)"
 rm -f "output/$CONF/little/buildroot-ext/.config"
 echo "✅ old .config removed"
 
-# ── 8. 单次 buildroot ──
+# ── 8. 验证 + 构建 ──
+echo "=== PRE-BUILD CHECK ==="
+echo "last 3 lines of arch.mk.riscv:"
+tail -3 "$BRW_DIR/arch/arch.mk.riscv"
 echo "═══ buildroot ═══"
 timeout 2700 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
 
