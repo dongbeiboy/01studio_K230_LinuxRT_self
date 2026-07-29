@@ -22,10 +22,13 @@ cp .github/patches/0002-fix-stat-ver-glibc235.patch "$BRW_DIR/package/fakeroot/"
 printf '#!/bin/sh\necho "[CI] check-bin-arch skipped"\nexit 0\n' > "$BRW_DIR/support/scripts/check-bin-arch"
 echo "✅ patches installed"
 
-# ── 3. 确保 THEAD (Xuantie 扩展) ──
-DEFC="$BRW_DIR/configs/k230_evb_defconfig"
-grep -q 'BR2_RISCV_ISA_CUSTOM_THEAD=y' "$DEFC" || echo "BR2_RISCV_ISA_CUSTOM_THEAD=y" >> "$DEFC"
-echo "✅ THEAD ensured"
+# ── 3. 无条件启用 Xuantie 扩展 ──
+# arch.mk.riscv 的 THEAD 是 ifeq 条件编译，依赖 .config 中
+# BR2_RISCV_ISA_THEAD=y（Kconfig 合并时可能丢失）。
+# 直接删条件，无条件追加 xthead。
+sed -i 's/ifeq (\$(BR2_RISCV_ISA_THEAD),y)/ifeq (y,y)/' "$BRW_DIR/arch/arch.mk.riscv"
+rm -f "output/$CONF/little/buildroot-ext/.config"
+echo "✅ arch.mk: xthead unconditional, old .config removed"
 
 # ── 4. 绕过 copy_toolchain_lib_root ──
 PKG_MK="$BRW_DIR/toolchain/toolchain-external/pkg-toolchain-external.mk"
