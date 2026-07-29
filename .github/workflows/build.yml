@@ -477,12 +477,9 @@ jobs:
           # helpers.mk: readlink -f → readlink -m（target libs 步骤仍会用到）
           sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
           echo "✅ helpers.mk: readlink -f → readlink -m"
-          # toolchain-wrapper 的 BR_ARCH 缺 _xtheadc（Xuantie 扩展），
-          # 导致编译 vg_lite 等包时 as 不认识 dcache.civa 等指令。
-          # GCC_TARGET_ARCH 来自 buildroot config(rv64imafdc)，mk 文件里没有字面值。
-          # 在 $(GCC_TARGET_ARCH) 后面追加 _xtheadc。
-          sed -i 's/\$(GCC_TARGET_ARCH)/$(GCC_TARGET_ARCH)_xtheadc/g' "$PKG_MK"
-          echo "✅ pkg-toolchain-external.mk: GCC_TARGET_ARCH +_xtheadc"
+          # toolchain-wrapper 的 BR_ARCH 从 buildroot defconfig 生成。
+          # k230_evb_defconfig 已配置 BR2_RISCV_ISA_CUSTOM_THEAD=y，
+          # GCC_TARGET_ARCH 自动 = rv64imafdcxthead。不需要额外 sed。──
           # cpio.mk 去 mknod
           sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
           echo "✅ cpio mknod disabled"
@@ -500,7 +497,10 @@ jobs:
           n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
           [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
           echo "✅ staging pre-populated ($n libc found)"
-          # ── 4. 单次 buildroot ──
+          # ── 4. 强制再生 .config（旧缓存可能残留不完整配置）──
+          rm -f "output/${{ env.CONF }}/little/buildroot-ext/.config"
+          echo "✅ old .config removed, will regenerate from defconfig"
+          # ── 5. 单次 buildroot ──
           echo "═══ buildroot ═══"
           timeout 2700 make CONF=${{ env.CONF }} buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
           # ── 5. 收尾 ──
