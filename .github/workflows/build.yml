@@ -446,7 +446,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
             fakeroot dosfstools mtools cpio unzip rsync file bc \
-            libconfuse2 libconfuse-dev
+            libconfuse2 libconfuse-dev python3-pip
+          pip3 install pycryptodome
           wget -q https://github.com/pengutronix/genimage/releases/download/v16/genimage-16.tar.xz \
             -O /tmp/genimage.tar.xz
           cd /tmp && tar -xf genimage.tar.xz
