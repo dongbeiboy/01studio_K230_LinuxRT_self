@@ -541,6 +541,10 @@ jobs:
           chmod +x "${LINUX_BUILD_DIR}/scripts/dtc/dtc" 2>/dev/null || true
           chmod +x "${UBOOT_BUILD_DIR}/tools/mkimage" 2>/dev/null || true
           chmod +x "${UBOOT_BUILD_DIR}/tools/mkenvimage" 2>/dev/null || true
+          # CI 无 loop 设备，用 mtools 替代 mount 填充 vfat
+          sed -i 's/^\([[:space:]]*\)mount -t vfat -o loop app.vfat.*/\1[ -z "$(ls big-core\/app\/ 2>\/dev\/null)" ] || mcopy -s -i app.vfat big-core\/app\/* ::\/ 2>\/dev\/null || true # CI mtools/' board/common/gen_image_script/gen_image_comm_func.sh
+          sed -i '/^[[:space:]]*cp -a big-core\/app\/\* \$VMT/d' board/common/gen_image_script/gen_image_comm_func.sh
+          sed -i 's/^\([[:space:]]*\)sync && umount \$VMT && rmdir \$VMT/\1true # CI skip umount/' board/common/gen_image_script/gen_image_comm_func.sh
           # 构建 AB 出厂刷机包
           export BUILD_AB_IMAGE=1
           bash board/common/gen_image_script/gen_image.sh
