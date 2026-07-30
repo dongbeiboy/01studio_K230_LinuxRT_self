@@ -190,6 +190,7 @@ jobs:
             output/${{ env.CONF }}/big/
             output/${{ env.CONF }}/common/
             src/big/rt-smart/userapps/root/
+            src/big/mpp/userapps/sample/elf/
             src/common/cdk/user/out/big/*
           retention-days: 1
 
