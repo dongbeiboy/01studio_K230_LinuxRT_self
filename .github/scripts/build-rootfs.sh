@@ -44,11 +44,21 @@ sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
 sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
 echo "✅ copy_toolchain_lib_root bypassed"
 
-# ── 5. cpio.mk 去 mknod ──
+# ── 5. 预 stub makedevs：CI 无 mknod 权限，在 buildroot 调用之前准备好 no-op ──
+FB="output/$CONF/little/buildroot-ext/host/bin"
+mkdir -p "$FB"
+# 只做一次：如果 makedevs 还不存在或已经是 no-op 就跳过
+if [ ! -f "$FB/makedevs" ] || ! grep -q '^exit 0$' "$FB/makedevs" 2>/dev/null; then
+  printf '#!/bin/sh\nexit 0\n' > "$FB/makedevs"
+  chmod +x "$FB/makedevs"
+  echo "✅ makedevs pre-stubbed (CI no mknod)"
+fi
+
+# ── 6. cpio.mk 去 mknod ──
 sed -i '/^[[:space:]]*mknod /s/^/#CI-DISABLED /' "$BRW_DIR/fs/cpio/cpio.mk"
 echo "✅ cpio mknod disabled"
 
-# ── 6. 预填充 staging ──
+# ── 7. 预填充 staging ──
 STGDIR="output/$CONF/little/buildroot-ext/host/riscv64-buildroot-linux-gnu/sysroot"
 TC=/opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0
 mkdir -p "$STGDIR"
@@ -63,7 +73,7 @@ n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
 [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
 echo "✅ staging pre-populated ($n libc found)"
 
-# ── 7. 构建（allow makedevs failure on CI, will retry in step 8）──
+# ── 8. 构建（makedevs 已 stub，cpio/ext2 都走正常 fakeroot 管线）──
 echo "=== PRE-BUILD CHECK ==="
 echo "last 3 lines of arch.mk.riscv:"
 tail -3 "$BRW_DIR/arch/arch.mk.riscv"
@@ -78,26 +88,8 @@ EOF
   echo "✅ buildroot ccache enabled ($CCACHE_DIR)"
 fi
 echo "═══ buildroot ═══"
-timeout 2700 make CONF="$CONF" buildroot 2>&1 || echo "⚠️  buildroot failed (likely makedevs EPERM on CI). Will retry in step 8..."
+timeout 2700 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
 
-# ── 8. stub makedevs → re-run buildroot（走 buildroot 正常 fakeroot 管线，不手动拼 cpio）──
 CPIO="output/$CONF/little/buildroot-ext/images/rootfs.cpio"
-if [ ! -f "$CPIO" ] || [ ! -s "$CPIO" ]; then
-  FB="output/$CONF/little/buildroot-ext/host/bin"
-  # 替换 makedevs 为 no-op，device node 由 devtmpfs 运行时创建
-  mv "$FB/makedevs" "$FB/makedevs.real" 2>/dev/null || true
-  printf '#!/bin/sh\nexit 0\n' > "$FB/makedevs"
-  chmod +x "$FB/makedevs"
-  echo "✅ makedevs stubbed"
-  # 预创建空设备文件占位，避免后续脚本 cp 时找不到
-  TGT="output/$CONF/little/buildroot-ext/build/buildroot-fs/cpio/target"
-  mkdir -p "$TGT/dev"
-  for n in null console zero mem ttyS0 ttyAMA0; do touch "$TGT/dev/$n"; done
-  # 清理失败残留，让 buildroot 重新生成 cpio
-  rm -f "$CPIO"
-  # 重新跑 buildroot，它只会重做 cpio 那一步，走正常 fakeroot + chown + cpio 管线
-  echo "🔧 re-running buildroot to regenerate cpio with stubbed makedevs..."
-  timeout 300 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot retry failed"; exit 1; }
-fi
 [ -f "$CPIO" ] && [ -s "$CPIO" ] || { echo "❌ FATAL: rootfs.cpio missing/empty"; exit 1; }
 echo "✅ rootfs.cpio built ($(du -h "$CPIO" | cut -f1))"
