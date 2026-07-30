@@ -492,14 +492,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.CONF }}-little
-          path: .
+          path: output/${{ env.CONF }}/
           run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download rootfs artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.CONF }}-rootfs
-          path: .
+          path: output/${{ env.CONF }}/little/buildroot-ext/
           run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Build image
