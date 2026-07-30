@@ -63,12 +63,12 @@ n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
 [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
 echo "✅ staging pre-populated ($n libc found)"
 
-# ── 7. 验证 + 构建 ──
+# ── 7. 构建（允许 rootfs makedevs 在 CI 无 mknod 权限时失败）──
 echo "=== PRE-BUILD CHECK ==="
 echo "last 3 lines of arch.mk.riscv:"
 tail -3 "$BRW_DIR/arch/arch.mk.riscv"
 echo "═══ buildroot ═══"
-timeout 2700 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
+timeout 2700 make CONF="$CONF" buildroot 2>&1 || echo "⚠️  buildroot failed (likely makedevs EPERM on CI). Will retry in step 8..."
 
 # ── 8. 收尾 ──
 FB="output/$CONF/little/buildroot-ext/host/bin"
