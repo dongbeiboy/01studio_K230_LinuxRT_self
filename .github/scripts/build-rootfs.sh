@@ -67,6 +67,16 @@ echo "✅ staging pre-populated ($n libc found)"
 echo "=== PRE-BUILD CHECK ==="
 echo "last 3 lines of arch.mk.riscv:"
 tail -3 "$BRW_DIR/arch/arch.mk.riscv"
+# 启用 ccache（由环境变量 CCACHE_DIR 控制）
+if [ -n "${CCACHE_DIR:-}" ] && command -v ccache &>/dev/null; then
+  cat >> "output/$CONF/little/buildroot-ext/.config" <<EOF
+BR2_CCACHE=y
+BR2_CCACHE_DIR="$CCACHE_DIR"
+BR2_CCACHE_USE_BASEDIR=y
+BR2_CCACHE_INITIAL_SETUP="--max-size=2G"
+EOF
+  echo "✅ buildroot ccache enabled ($CCACHE_DIR)"
+fi
 echo "═══ buildroot ═══"
 timeout 2700 make CONF="$CONF" buildroot 2>&1 || echo "⚠️  buildroot failed (likely makedevs EPERM on CI). Will retry in step 8..."
 

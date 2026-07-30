@@ -390,13 +390,27 @@ jobs:
       - name: Link toolchain to /opt/toolchain
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
+      - name: Restore ccache (buildroot)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/.ccache-brw
+          key: ccache-buildroot-${{ env.CONF }}-${{ github.run_id }}
+          restore-keys: ccache-buildroot-${{ env.CONF }}-
 
       - name: Build buildroot
         run: |
           ${{ env.DEBUG_RUN == 'true' && 'set -x' || ':' }}
           export CONF="${{ env.CONF }}"
+          export CCACHE_DIR="${{ github.workspace }}/.ccache-brw"
           bash .github/scripts/build-rootfs.sh
         timeout-minutes: 80
+
+      - name: Save ccache (buildroot)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.ccache-brw
+          key: ccache-buildroot-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Upload buildroot outputs
         uses: actions/upload-artifact@v4
