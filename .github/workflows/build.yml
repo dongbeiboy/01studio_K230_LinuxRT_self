@@ -541,20 +541,31 @@ jobs:
           chmod +x "${LINUX_BUILD_DIR}/scripts/dtc/dtc" 2>/dev/null || true
           chmod +x "${UBOOT_BUILD_DIR}/tools/mkimage" 2>/dev/null || true
           chmod +x "${UBOOT_BUILD_DIR}/tools/mkenvimage" 2>/dev/null || true
+          # 构建 AB 出厂刷机包
+          export BUILD_AB_IMAGE=1
           bash board/common/gen_image_script/gen_image.sh
+          # 构建 OTA 升级包
+          bash tools/build_ota_package.sh "${IMAGE_DIR}"
 
       - name: Package release
         run: |
           mkdir -p release
-          IMG="output/${{ env.CONF }}/images/sysimage-sdcard.img.gz"
+          IMG="output/${{ env.CONF }}/images/sysimage-sdcard-ab.img.gz"
+          OTA_PKG=$(ls output/${{ env.CONF }}/images/k230_ota_ab_*.tar.gz 2>/dev/null | head -1)
           if [ -f "$IMG" ]; then
-            cp "$IMG" "release/${{ env.CONF }}_sysimage-sdcard.img.gz"
-            ls -lh release/
+            cp "$IMG" "release/${{ env.CONF }}_sysimage-sdcard-ab.img.gz"
           else
-            echo "❌ Image not found: $IMG"
+            echo "❌ AB image not found: $IMG"
             find output/${{ env.CONF }}/images/ -type f | head -20
             exit 1
           fi
+          if [ -f "$OTA_PKG" ]; then
+            cp "$OTA_PKG" "release/"
+          else
+            echo "❌ OTA package not found"
+            exit 1
+          fi
+          ls -lh release/
 
       - name: Upload final image
         uses: actions/upload-artifact@v4
