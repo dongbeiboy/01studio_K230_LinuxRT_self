@@ -87,8 +87,7 @@ if [ -f "$FSCR" ] && [ ! -f "$CPIO" ]; then
   echo "🔧 Manual cpio..."
   sed -i '/mknod /s/^/echo [SKIP] /' "$FSCR"
   sed -i '/makedevs /s/^/echo [SKIP] /' "$FSCR"
-  sed -i 's/^chown -h -R 0:0/echo [SKIP] chown/' "$FSCR"
-  PATH="$FB:$FB/../sbin:$PATH" bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
+  FAKEROOTDONTTRYCHOWN=1 PATH="$FB:$FB/../sbin:$PATH" "$FB/fakeroot" -- bash "$FSCR" && touch "$CPIO" && echo "✅ cpio done"
 fi
 [ -f "$CPIO" ] && [ -s "$CPIO" ] || { echo "❌ FATAL: rootfs.cpio missing/empty"; exit 1; }
 echo "✅ rootfs.cpio built ($(du -h "$CPIO" | cut -f1))"
