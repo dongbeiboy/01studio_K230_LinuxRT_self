@@ -520,6 +520,11 @@ jobs:
           export UBOOT_BUILD_DIR="${BUILD_DIR}/little/uboot"
           export IMAGE_DIR="${BUILD_DIR}/images"
           export RTSMART_SRC_DIR="${K230_SDK_ROOT}/src/big/rt-smart"
+          # artifact zip 不保留执行权限，恢复关键二进制
+          chmod +x "${BUILDROOT_BUILD_DIR}/host/sbin/mkfs.ext4" 2>/dev/null || true
+          chmod +x "${LINUX_BUILD_DIR}/scripts/dtc/dtc" 2>/dev/null || true
+          chmod +x "${UBOOT_BUILD_DIR}/tools/mkimage" 2>/dev/null || true
+          chmod +x "${UBOOT_BUILD_DIR}/tools/mkenvimage" 2>/dev/null || true
           bash board/common/gen_image_script/gen_image.sh
 
       - name: Package release
