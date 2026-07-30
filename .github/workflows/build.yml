@@ -316,7 +316,7 @@ jobs:
             output/${{ env.CONF }}/little/uboot/tools/mkimage
             output/${{ env.CONF }}/little/uboot/tools/mkenvimage
             output/${{ env.CONF }}/little/uboot/u-boot.bin
-            output/${{ env.CONF }}/little/uboot/u-boot-spl.bin
+            output/${{ env.CONF }}/little/uboot/spl/u-boot-spl.bin
             output/${{ env.CONF }}/common/little-opensbi/
           retention-days: 1
 
