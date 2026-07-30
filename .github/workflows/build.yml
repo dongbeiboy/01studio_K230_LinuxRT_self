@@ -166,8 +166,8 @@ jobs:
           key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
           restore-keys: ccache-rtt-${{ env.CONF }}-
 
-      - name: Build big core (RTT + MPP + OpenSBI)
-        run: make CONF=${{ env.CONF }} rt-smart
+      - name: Build big core (RTT + MPP + OpenSBI + CDK)
+        run: make CONF=${{ env.CONF }} rt-smart cdk-user
         env:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 150
