@@ -34,10 +34,9 @@ cat /etc/version/release_version
 # 	fi;
 # fi
 
-cd /mnt
-insmod k_ipcm.ko
+insmod /sbin/k_ipcm.ko
 
-insmod k_virt-tty.ko
+insmod /sbin/k_virt-tty.ko
 
 mkdir /sharefs -p
 if `grep mmcblk0p3 /proc/cmdline >/dev/null` ; then
@@ -46,5 +45,4 @@ elif `grep mmcblk1p3 /proc/cmdline >/dev/null` ; then
 	mount /dev/mmcblk1p4 /sharefs
 fi
 
-./sharefs &
-cd -
+/sbin/sharefs &

@@ -86,7 +86,7 @@ else
   make CONF="$CONF" little-core-opensbi uboot
 
   log_step 3 "大核 RTT + MPP + CDK"
-  make CONF="$CONF" mpp rt-smart cdk-user
+  make CONF="$CONF" mpp rt-smart cdk-kernel cdk-kernel-install cdk-user cdk-user-install
 
   log_step 4 "Buildroot (rootfs)"
   bash "$K230_SDK_ROOT/.github/scripts/build-rootfs.sh"

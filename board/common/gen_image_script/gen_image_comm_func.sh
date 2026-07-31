@@ -58,6 +58,15 @@ copye_file_to_images()
 		mkdir -p ${BUILD_DIR}/images/little-core/ko-apps
 		cp -rf ${LINUX_BUILD_DIR}/rootfs/* ${BUILD_DIR}/images/little-core/ko-apps/
 
+		# CDK IPC kernel modules + sharefs (大核小核通信依赖)
+		CDK_IPCM_OUT="${K230_SDK_ROOT}/src/common/cdk/kernel/ipcm/out/node_0"
+		if [ -d "${CDK_IPCM_OUT}" ]; then
+			mkdir -p ${BUILD_DIR}/images/little-core/ko-apps/sbin
+			cp -f ${CDK_IPCM_OUT}/k_ipcm.ko ${BUILD_DIR}/images/little-core/ko-apps/sbin/ 2>/dev/null || true
+			cp -f ${CDK_IPCM_OUT}/k_virt-tty.ko ${BUILD_DIR}/images/little-core/ko-apps/sbin/ 2>/dev/null || true
+			cp -f ${CDK_IPCM_OUT}/sharefs ${BUILD_DIR}/images/little-core/ko-apps/sbin/ 2>/dev/null || true
+		fi
+
 		rm ${BUILD_DIR}/images/little-core/rootfs -rf
 		mkdir -p ${BUILD_DIR}/images/little-core/rootfs
 		cd ${BUILD_DIR}/images/little-core/rootfs;
@@ -74,6 +83,10 @@ copye_file_to_images()
 			cp -rf ${K230_SDK_ROOT}/board/common/post_copy_rootfs/*         ${BUILD_DIR}/images/little-core/rootfs/
 		fi
 		fakeroot -- cp -rf ${BUILD_DIR}/images/little-core/ko-apps/* ${BUILD_DIR}/images/little-core/rootfs/
+		# 生成 ld.so.cache，解决 /usr/lib 下 D-Bus/OpenSSL 等库找不到的问题
+		if [ -x /sbin/ldconfig ]; then
+			/sbin/ldconfig -r "${BUILD_DIR}/images/little-core/rootfs/" 2>/dev/null || true
+		fi
 		cd ${BUILD_DIR}/images/little-core/rootfs/; \
 		fakeroot -- ${K230_SDK_ROOT}/tools/mkcpio-rootfs.sh; \
 		cd ../;  tar -zcf rootfs-final.tar.gz rootfs;
