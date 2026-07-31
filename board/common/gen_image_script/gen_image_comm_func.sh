@@ -325,6 +325,8 @@ gen_image()
 					--inputpath "$(pwd)"  	--outputpath "$(pwd)"	--config "${cfg}"
 
 	rm -rf "${GENIMAGE_TMP}"
+	# 将镜像中全零区域转为 sparse holes，减少磁盘占用+Rufus/Etcher 可跳过烧写
+	fallocate -d ${image_name} 2>/dev/null || true
 	gzip -k -f ${image_name}
 	chmod a+rw ${image_name} ${image_name}.gz;
 	gz_file_add_ver ${image_name}.gz
