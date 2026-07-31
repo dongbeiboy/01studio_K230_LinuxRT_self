@@ -292,6 +292,38 @@ jobs:
           PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         timeout-minutes: 20
 
+      # ── CDK IPC 内核模块 + 用户态（k_ipcm.ko / k_virt-tty.ko / sharefs + out/little）──
+      # 依赖 linux，故 -o linux 跳过已构建的 linux。
+      # 顺序与本地 build_all.sh 一致：kernel → kernel-install → user → user-install
+      # （cdk-user-install 依赖 cdk-user 生成的 out/little/，缺一步 cp 即失败）
+      # 本地构建由 gen_image_comm_func.sh 从 src/common/cdk/.../out/node_0 拷入镜像 /sbin/；
+      # CI merge 是干净 checkout（src 下无产物），故在此直接把模块放到 rootfs/sbin/，
+      # 随 little artifact 上传，merge 打包时随 rootfs 进入镜像 /sbin/（rcS insmod 路径）。
+      - name: Build CDK kernel (IPCM) + install
+        run: |
+          make CONF=${{ env.CONF }} cdk-kernel -o linux
+          make CONF=${{ env.CONF }} cdk-kernel-install
+          make CONF=${{ env.CONF }} cdk-user cdk-user-install
+          SBIN="output/${{ env.CONF }}/little/linux/rootfs/sbin"
+          MNT="output/${{ env.CONF }}/little/linux/rootfs/mnt"
+          mkdir -p "$SBIN"
+          cp -f "$MNT"/k_ipcm.ko "$MNT"/k_virt-tty.ko "$MNT"/sharefs "$SBIN/"
+        env:
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        timeout-minutes: 30
+
+      - name: Verify CDK modules present
+        run: |
+          SBIN="output/${{ env.CONF }}/little/linux/rootfs/sbin"
+          for f in k_ipcm.ko k_virt-tty.ko sharefs; do
+            if [ -f "$SBIN/$f" ]; then
+              echo "✅ $f: $(ls -lh "$SBIN/$f" | awk '{print $5}')"
+            else
+              echo "❌ MISSING: $SBIN/$f"
+              exit 1
+            fi
+          done
+
       - name: Show ccache stats
         run: ccache -s
 
