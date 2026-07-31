@@ -127,6 +127,7 @@ output/k230_canmv_01studio_defconfig/images/
 ## 已知问题
 
 - 屏幕不亮
+- balenaEtcher无法刷写镜像
 
 ---
 
