@@ -22,11 +22,11 @@ if grep -q 'TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS' /tmp/test_mk_copy.mk; then
   exit 1
 fi
 
-# 追加 _xtheadc
+# 删除 DBR_ARCH 行（wrapper 不再注入 -march，编译器回退默认 xtheadc）
 cp "$PKG_MK" /tmp/test_mk_arch.mk
-sed -i 's/\$(GCC_TARGET_ARCH)/$(GCC_TARGET_ARCH)_xtheadc/g' /tmp/test_mk_arch.mk
-if ! grep -q '_xtheadc' /tmp/test_mk_arch.mk; then
-  echo "❌ _xtheadc not inserted into pkg-toolchain-external.mk"
+sed -i '/^TOOLCHAIN_EXTERNAL_TOOLCHAIN_WRAPPER_ARGS += -DBR_ARCH/d' /tmp/test_mk_arch.mk
+if grep -q 'DBR_ARCH' /tmp/test_mk_arch.mk; then
+  echo "❌ DBR_ARCH not removed from pkg-toolchain-external.mk"
   exit 1
 fi
 echo "✅ pkg-toolchain-external.mk patches OK"
@@ -36,23 +36,24 @@ HLP_MK="$BRW_DIR/toolchain/helpers.mk"
 test -f "$HLP_MK" || { echo "❌ $HLP_MK not found"; exit 1; }
 cp "$HLP_MK" /tmp/test_hlp.mk
 sed -i 's/readlink -f/readlink -m/g' /tmp/test_hlp.mk
-if grep 'readlink -f' /tmp/test_hlp.mk | grep -qv '_xtheadc'; then
+if grep -q 'readlink -f' /tmp/test_hlp.mk; then
   remaining=$(grep -c 'readlink -f' /tmp/test_hlp.mk 2>/dev/null || true)
   echo "⚠️  $remaining readlink -f remaining (may be from binary strings)"
 fi
 echo "✅ helpers.mk readlink OK"
 
-# 3. pkg-generic.mk: 进度行注入
-GEN_MK="$BRW_DIR/package/pkg-generic.mk"
-test -f "$GEN_MK" || { echo "❌ $GEN_MK not found"; exit 1; }
-cp "$GEN_MK" /tmp/test_gen.mk
-TAB="$(printf '\t')"
-sed -i "/Fixing libtool files/i\\${TAB}@echo \"  .la files to fix:\"; find \$(STAGING_DIR)/usr/lib* -name '*.la' 2>/dev/null | wc -l" /tmp/test_gen.mk
-if ! grep -q '.la files to fix' /tmp/test_gen.mk; then
-  echo "❌ pkg-generic.mk progress not inserted"
-  exit 1
+# 3. fs/ext2/Config.in: 默认大小 200M（AB 分区 rootfs_a=374M rootfs_b=256M）
+EXT2_CFG="$BRW_DIR/fs/ext2/Config.in"
+test -f "$EXT2_CFG" || { echo "❌ $EXT2_CFG not found"; exit 1; }
+cp "$EXT2_CFG" /tmp/test_ext2.mk
+if ! grep -q 'default "200M"' "$EXT2_CFG"; then
+  sed -i 's/default "60M"/default "200M"/' /tmp/test_ext2.mk
+  if ! grep -q 'default "200M"' /tmp/test_ext2.mk; then
+    echo "❌ ext2 default size not updated to 200M"
+    exit 1
+  fi
 fi
-echo "✅ pkg-generic.mk progress injection OK"
+echo "✅ ext2 default size OK"
 
 # 4. cpio.mk: mknod disable
 CPIO_MK="$BRW_DIR/fs/cpio/cpio.mk"
@@ -65,5 +66,5 @@ if ! grep -q 'CI-DISABLED' /tmp/test_cpio.mk; then
 fi
 echo "✅ cpio.mk mknod OK"
 
-rm -f /tmp/test_mk_copy.mk /tmp/test_mk_arch.mk /tmp/test_hlp.mk /tmp/test_gen.mk /tmp/test_cpio.mk
+rm -f /tmp/test_mk_copy.mk /tmp/test_mk_arch.mk /tmp/test_hlp.mk /tmp/test_ext2.mk /tmp/test_cpio.mk
 echo "=== ALL PATCH TESTS PASSED ==="

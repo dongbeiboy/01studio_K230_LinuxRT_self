@@ -65,8 +65,10 @@ jobs:
     name: Check
     if: github.event_name != 'workflow_dispatch' && (github.event_name == 'pull_request' || github.ref_type == 'branch')
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
 
       - name: Validate defconfigs
         run: |
@@ -77,14 +79,15 @@ jobs:
           done
 
       - name: ShellCheck scripts
+        # 只检查 CI 维护的脚本（src/ 下第三方示例代码不纳入门禁）；
+        # 去掉 || true，有告警即失败，门禁真实生效
         run: |
           sudo apt-get install -y -qq shellcheck
-          find . -name "*.sh" \
-            -not -path "*/output/*" \
-            -not -path "*/dl/*" \
-            -not -path "*/buildroot-*/*" \
-            -not -path "*/tools/kconfig/*" \
-            -exec shellcheck -S warning {} + 2>/dev/null || true
+          shellcheck -S warning \
+            .github/scripts/*.sh \
+            .github/test-patches.sh \
+            build_all.sh \
+            tools/build_ota_package.sh
 
   # ──────────────────────────────────────────────────────────
   # 大核：RTT / MPP / Big-core OpenSBI
@@ -103,6 +106,8 @@ jobs:
         github.event.inputs.target == 'full' || github.event.inputs.target == 'big'
       ))
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -115,7 +120,7 @@ jobs:
       DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
         with:
           fetch-depth: 0
 
@@ -124,14 +129,14 @@ jobs:
 
       - name: Restore toolchain cache
         id: cache-tc
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: |
             src/.src_fetched
@@ -160,7 +165,7 @@ jobs:
         run: bash .github/scripts/setup-ccache.sh '${{ github.workspace }}/.ccache-rtt' /opt/toolchain/riscv64-linux-musleabi_for_x86_64-pc-linux-gnu/bin riscv64-unknown-linux-musl
 
       - name: Restore ccache (rtt)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: ${{ github.workspace }}/.ccache-rtt
           key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
@@ -177,13 +182,13 @@ jobs:
 
       - name: Save ccache (rtt)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: ${{ github.workspace }}/.ccache-rtt
           key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Upload big core outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: ${{ env.CONF }}-big
           path: |
@@ -192,7 +197,7 @@ jobs:
             src/big/rt-smart/userapps/root/
             src/big/mpp/userapps/sample/elf/
             src/common/cdk/user/out/big/*
-          retention-days: 1
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────
   # 小核：Linux + U-Boot + little-core OpenSBI
@@ -211,6 +216,8 @@ jobs:
         github.event.inputs.target == 'full' || github.event.inputs.target == 'little'
       ))
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -222,7 +229,7 @@ jobs:
       DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
         with:
           fetch-depth: 0
 
@@ -231,14 +238,14 @@ jobs:
 
       - name: Restore toolchain cache
         id: cache-tc
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: |
             src/.src_fetched
@@ -267,7 +274,7 @@ jobs:
         run: bash .github/scripts/setup-ccache.sh '${{ github.workspace }}/.ccache' /opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin riscv64-unknown-linux-gnu
 
       - name: Restore ccache (linux)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ env.CONF }}-${{ github.run_id }}
@@ -290,7 +297,7 @@ jobs:
 
       - name: Save ccache (linux)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ env.CONF }}-${{ github.run_id }}
@@ -307,7 +314,7 @@ jobs:
           fi
 
       - name: Upload linux/uboot/opensbi outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: ${{ env.CONF }}-little
           path: |
@@ -319,7 +326,7 @@ jobs:
             output/${{ env.CONF }}/little/uboot/u-boot.bin
             output/${{ env.CONF }}/little/uboot/spl/u-boot-spl.bin
             output/${{ env.CONF }}/common/little-opensbi/
-          retention-days: 1
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────
   # rootfs：Buildroot（独立并行）
@@ -338,6 +345,8 @@ jobs:
         github.event.inputs.target == 'full' || github.event.inputs.target == 'rootfs'
       ))
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -349,7 +358,7 @@ jobs:
       DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
         with:
           fetch-depth: 0
 
@@ -358,14 +367,14 @@ jobs:
 
       - name: Restore toolchain cache
         id: cache-tc
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: |
             src/.src_fetched
@@ -391,7 +400,7 @@ jobs:
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
       - name: Restore ccache (buildroot)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: ${{ github.workspace }}/.ccache-brw
           key: ccache-buildroot-${{ env.CONF }}-${{ github.run_id }}
@@ -407,19 +416,19 @@ jobs:
 
       - name: Save ccache (buildroot)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: ${{ github.workspace }}/.ccache-brw
           key: ccache-buildroot-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Upload buildroot outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: ${{ env.CONF }}-rootfs
           path: |
             output/${{ env.CONF }}/little/buildroot-ext/images/
             output/${{ env.CONF }}/little/buildroot-ext/host/sbin/mkfs.ext4
-          retention-days: 1
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────
   # 打包镜像：合并三个上游 artifact → genimage → 最终镜像
@@ -430,6 +439,8 @@ jobs:
     name: "打包镜像  ${{ matrix.conf }}"
     if: |
       always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
       (
         (github.ref_type == 'tag' && (
           contains(github.ref_name, '-full') ||
@@ -441,6 +452,8 @@ jobs:
       )
     needs: [build-big, build-little, build-rootfs]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -454,7 +467,7 @@ jobs:
       ARTIFACT_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pack' && github.event.inputs.artifact_run_id || github.run_id }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
 
       - name: Install genimage + tools
         run: |
@@ -469,7 +482,7 @@ jobs:
           cd genimage-16 && ./configure && make -j"$(nproc)" && sudo make install
 
       - name: Restore source cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: |
             src/.src_fetched
@@ -487,7 +500,7 @@ jobs:
         run: mkdir -p output/${{ env.CONF }}/images
 
       - name: Restore toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
@@ -498,21 +511,21 @@ jobs:
           ls /opt/toolchain/*/bin/*gcc 2>/dev/null || echo "⚠️ toolchain incomplete — check may fail"
 
       - name: Download big core artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
         with:
           name: ${{ env.CONF }}-big
           path: .
           run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download little core artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
         with:
           name: ${{ env.CONF }}-little
           path: output/${{ env.CONF }}/
           run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download rootfs artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
         with:
           name: ${{ env.CONF }}-rootfs
           path: output/${{ env.CONF }}/little/buildroot-ext/
@@ -572,7 +585,7 @@ jobs:
           ls -lh release/
 
       - name: Upload final image
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: ${{ env.CONF }}
           path: release/
@@ -586,6 +599,7 @@ jobs:
     name: GitHub Release
     if: |
       always() &&
+      needs.merge.result == 'success' &&
       (
         (github.ref_type == 'tag' && (
           contains(github.ref_name, '-full') ||
@@ -599,14 +613,14 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
         with:
           pattern: 'k230_canmv*'
           merge-multiple: true
           path: release
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           name: ${{ github.ref_name }}
           files: release/*

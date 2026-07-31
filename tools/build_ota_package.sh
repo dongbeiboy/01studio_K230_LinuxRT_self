@@ -12,7 +12,8 @@ IMAGES_DIR="${1:-${SDK_ROOT}/output/k230_canmv_01studio_defconfig/images}"
 
 PARTITION_LAYOUT="${SDK_ROOT}/board/common/gen_image_cfg/partition_layout.sh"
 if [ -f "$PARTITION_LAYOUT" ]; then
-    source "$PARTITION_LAYOUT"
+    # shellcheck disable=SC1090
+source "$PARTITION_LAYOUT"
 else
     echo "ERROR: partition_layout.sh not found"
     exit 1
@@ -43,7 +44,8 @@ truncate -s $ROOTFS_SIZE rootfs.ext4
 # 校验大小
 check_size() {
     local f="$1" expected="$2"
-    local actual=$(stat -c %s "$f")
+    local actual
+    actual=$(stat -c %s "$f")
     if [ "$actual" -ne "$expected" ]; then
         echo "ERROR: $f size $actual != expected $expected"
         exit 1
