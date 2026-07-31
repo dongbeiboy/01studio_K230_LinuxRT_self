@@ -75,7 +75,7 @@
 - WSL2 + Ubuntu 22.04 
 - 磁盘空间 ≥ 20GB
 
-### 一键编译（推荐在 WSL/原生 Linux 上裸编译）（开发中）
+### 一键编译
 
 ```bash
 # 安装依赖（仅首次）
@@ -93,31 +93,40 @@ make prepare_sourcecode
 # 链接工具链
 sudo ln -sf $(pwd)/toolchain /opt/toolchain
 
-# 编译 01Studio 镜像
-make CONF=k230_canmv_01studio_defconfig
-```
+# 一键编译（A/B 镜像 + OTA 包，~90 分钟）
+bash build_all.sh
 
-> **注意**：WSL 环境下 PATH 包含 Windows 路径可能导致语法错误，建议使用：
-> ```bash
-> PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" make CONF=k230_canmv_01studio_defconfig
-> ```
+# 选项：
+bash build_all.sh --clean              # 清空缓存全新编译
+bash build_all.sh --ab-only            # 只打包镜像（跳过编译）
+bash build_all.sh --rootfs-only        # 只编译 rootfs + 打包
+bash build_all.sh k230_evb_defconfig   # 指定 defconfig
+```
 
 ### 编译产物
 
 ```
 output/k230_canmv_01studio_defconfig/images/
-├── sysimage-sdcard.img       # SD 卡烧录镜像 (~513MB)
-└── sysimage-sdcard.img.gz    # 压缩版 (~66MB)
+├── sysimage-sdcard-ab.img.gz       # A/B 双槽烧录镜像 (~126M)
+├── sysimage-sdcard-ab.img          # 解压后 (1014M, sparse 279M)
+└── k230_ota_ab_YYYYMMDD.tar.gz     # OTA 升级包 (~49M)
 ```
 
 ### 烧录 TF 卡
 
-```bash
-# Linux
-sudo dd if=sysimage-sdcard.img of=/dev/sdX bs=1M oflag=sync
+推荐使用 **balenaEtcher**（跨平台，免费）：
 
-# Windows: 推荐使用 Rufus (http://rufus.ie/)
-```
+1. 下载 [balenaEtcher](https://etcher.io)
+2. 选择 `sysimage-sdcard-ab.img.gz`（**无需解压**）
+3. 选择 SD 卡 → 点击 Flash
+
+> Etcher 自动识别稀疏镜像，只写有效数据 (~279M)，烧录快速。
+>
+> **不推荐** `gunzip | dd`：解压后镜像 1014M 全写 SD 卡，比 Etcher 慢 4 倍以上。
+> 如果必须用 `dd`，加 `conv=sparse`：
+> ```bash
+> gunzip -c sysimage-sdcard-ab.img.gz | sudo dd of=/dev/sdX bs=1M conv=sparse status=progress
+> ```
 
 ---
 
@@ -155,13 +164,14 @@ make CONF=k230_canmv_01studio_defconfig build-image
 ### A/B 双槽升级包编译
 
 ```bash
-# 构建升级包（A/B 双槽）
+# 一键编译（产出 sysimage-sdcard-ab.img.gz + OTA 包）
+bash build_all.sh
+
+# 仅打包（源码未变时）
+bash build_all.sh --ab-only
+
+# 或者手动调用
 BUILD_AB_IMAGE=1 make CONF=k230_canmv_01studio_defconfig build-image
-
-# 一键构建烧录包 + A/B 升级包
-bash tools/build_both.sh
-
-# 构建 OTA .swu 升级包
 bash tools/build_ota_package.sh
 ```
 
