@@ -45,6 +45,12 @@ if [ "${CONFIG_REMOTE_TEST_PLATFORM}" = "y" ] ; then
 elif [ "${BUILD_AB_IMAGE}" = "1" ] ; then
 	# === A/B 升级镜像 ===
 	gen_final_ext2 256M       # rootfs 扩容到 256M（覆盖上面的 128M）
+	# 为 A/B 双槽制作独立 rootfs（不同 UUID + LABEL，避免 Windows/Linux 歧义）
+	cd "${BUILD_DIR}/images/little-core/"
+	cp rootfs.ext4 rootfs_b.ext4
+	tune2fs -L "rootfs_b" -U random rootfs_b.ext4 </dev/null 2>/dev/null || true
+	tune2fs -L "rootfs_a" rootfs.ext4 </dev/null 2>/dev/null || true
+	cd "${BUILD_DIR}"
 	gen_app_vfat
 	gen_image ${GENIMAGE_CFG_SD_AB}  sysimage-sdcard-ab.img
 	# 构建后校验
