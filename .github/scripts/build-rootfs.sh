@@ -44,6 +44,10 @@ sed -i '/^[[:space:]]*\$\$(TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS)/d' "$PKG_MK"
 sed -i 's/readlink -f/readlink -m/g' "$BRW_DIR/toolchain/helpers.mk"
 echo "✅ copy_toolchain_lib_root bypassed"
 
+# ── 4b. 扩 ext2 默认：patch 0010 未自动应用 → CI 只复制了 2 个 patch，0010 漏了 ──
+sed -i 's/default "60M"/default "500M"/' "$BRW_DIR/fs/ext2/Config.in"
+echo "✅ ext2 default size 60M→500M"
+
 # ── 5. 预 stub makedevs：CI 无 mknod 权限，在 buildroot 调用之前准备好 no-op ──
 FB="output/$CONF/little/buildroot-ext/host/bin"
 mkdir -p "$FB"
