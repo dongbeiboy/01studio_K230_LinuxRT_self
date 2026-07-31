@@ -68,7 +68,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Validate defconfigs
         run: |
@@ -120,7 +120,7 @@ jobs:
       DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
-      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
@@ -129,14 +129,14 @@ jobs:
 
       - name: Restore toolchain cache
         id: cache-tc
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             src/.src_fetched
@@ -165,7 +165,7 @@ jobs:
         run: bash .github/scripts/setup-ccache.sh '${{ github.workspace }}/.ccache-rtt' /opt/toolchain/riscv64-linux-musleabi_for_x86_64-pc-linux-gnu/bin riscv64-unknown-linux-musl
 
       - name: Restore ccache (rtt)
-        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ github.workspace }}/.ccache-rtt
           key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
@@ -182,13 +182,13 @@ jobs:
 
       - name: Save ccache (rtt)
         if: always()
-        uses: actions/cache/save@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ github.workspace }}/.ccache-rtt
           key: ccache-rtt-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Upload big core outputs
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ env.CONF }}-big
           path: |
@@ -229,7 +229,7 @@ jobs:
       DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
-      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
@@ -238,14 +238,14 @@ jobs:
 
       - name: Restore toolchain cache
         id: cache-tc
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             src/.src_fetched
@@ -274,7 +274,7 @@ jobs:
         run: bash .github/scripts/setup-ccache.sh '${{ github.workspace }}/.ccache' /opt/toolchain/Xuantie-900-gcc-linux-5.10.4-glibc-x86_64-V2.6.0/bin riscv64-unknown-linux-gnu
 
       - name: Restore ccache (linux)
-        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ env.CONF }}-${{ github.run_id }}
@@ -329,7 +329,7 @@ jobs:
 
       - name: Save ccache (linux)
         if: always()
-        uses: actions/cache/save@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-linux-${{ env.CONF }}-${{ github.run_id }}
@@ -346,7 +346,7 @@ jobs:
           fi
 
       - name: Upload linux/uboot/opensbi outputs
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ env.CONF }}-little
           path: |
@@ -390,7 +390,7 @@ jobs:
       DEBUG_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug != 'false' || 'false' }}
 
     steps:
-      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
@@ -399,14 +399,14 @@ jobs:
 
       - name: Restore toolchain cache
         id: cache-tc
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
 
       - name: Restore source cache
         id: cache-src
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             src/.src_fetched
@@ -432,7 +432,7 @@ jobs:
         run: sudo rm -rf /opt/toolchain && sudo ln -s "$(pwd)/toolchain" /opt/toolchain
 
       - name: Restore ccache (buildroot)
-        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ github.workspace }}/.ccache-brw
           key: ccache-buildroot-${{ env.CONF }}-${{ github.run_id }}
@@ -448,13 +448,13 @@ jobs:
 
       - name: Save ccache (buildroot)
         if: always()
-        uses: actions/cache/save@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ github.workspace }}/.ccache-brw
           key: ccache-buildroot-${{ env.CONF }}-${{ github.run_id }}
 
       - name: Upload buildroot outputs
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ env.CONF }}-rootfs
           path: |
@@ -499,7 +499,7 @@ jobs:
       ARTIFACT_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pack' && github.event.inputs.artifact_run_id || github.run_id }}
 
     steps:
-      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Install genimage + tools
         run: |
@@ -514,7 +514,7 @@ jobs:
           cd genimage-16 && ./configure && make -j"$(nproc)" && sudo make install
 
       - name: Restore source cache
-        uses: actions/cache/restore@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             src/.src_fetched
@@ -532,7 +532,7 @@ jobs:
         run: mkdir -p output/${{ env.CONF }}/images
 
       - name: Restore toolchain
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: toolchain
           key: toolchain-${{ env.CONF }}-${{ hashFiles('Makefile', format('configs/{0}', env.CONF)) }}-v4
@@ -543,21 +543,21 @@ jobs:
           ls /opt/toolchain/*/bin/*gcc 2>/dev/null || echo "⚠️ toolchain incomplete — check may fail"
 
       - name: Download big core artifact
-        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ${{ env.CONF }}-big
           path: .
           run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download little core artifact
-        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ${{ env.CONF }}-little
           path: output/${{ env.CONF }}/
           run-id: ${{ env.ARTIFACT_RUN }}
 
       - name: Download rootfs artifact
-        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ${{ env.CONF }}-rootfs
           path: output/${{ env.CONF }}/little/buildroot-ext/
@@ -617,7 +617,7 @@ jobs:
           ls -lh release/
 
       - name: Upload final image
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ env.CONF }}
           path: release/
@@ -645,7 +645,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: 'k230_canmv*'
           merge-multiple: true
