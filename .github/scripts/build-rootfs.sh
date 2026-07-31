@@ -73,11 +73,7 @@ n=$(find "$STGDIR" -name 'libc.so*' 2>/dev/null | wc -l)
 [ "$n" -eq 0 ] && { echo "❌ FATAL: staging still empty ($SYSROOT→$STGDIR)"; ls "$SYSROOT"/lib/libc* 2>/dev/null || echo "no libc at source"; exit 1; }
 echo "✅ staging pre-populated ($n libc found)"
 
-# ── 8. 构建（makedevs 已 stub，cpio/ext2 都走正常 fakeroot 管线）──
-echo "=== PRE-BUILD CHECK ==="
-echo "last 3 lines of arch.mk.riscv:"
-tail -3 "$BRW_DIR/arch/arch.mk.riscv"
-# 启用 ccache（由环境变量 CCACHE_DIR 控制）
+# ── 8. ccache 配置注入 ──
 if [ -n "${CCACHE_DIR:-}" ] && command -v ccache &>/dev/null; then
   cat >> "output/$CONF/little/buildroot-ext/.config" <<EOF
 BR2_CCACHE=y
@@ -87,8 +83,35 @@ BR2_CCACHE_INITIAL_SETUP="--max-size=2G"
 EOF
   echo "✅ buildroot ccache enabled ($CCACHE_DIR)"
 fi
-echo "═══ buildroot ═══"
-timeout 2700 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
+
+# ── 9. 两步构建 ──
+# 问题：host-makedevs 包会覆盖我们的 stub → cpio/ext2 生成时 mknod EPERM
+# 方案：第一遍构建所有包（文件系统阶段失败忽略），重新 stub 后再跑第二遍
+# 第二遍时包已构建完，只需跑文件系统生成，用 stub 绕过设备节点
+
+echo "═══ buildroot pass 1 (packages) ═══"
+set +e
+timeout 2700 make CONF="$CONF" buildroot 2>&1
+PASS1_EXIT=$?
+set -e
+
+CPIO="output/$CONF/little/buildroot-ext/images/rootfs.cpio"
+if [ -f "$CPIO" ] && [ -s "$CPIO" ]; then
+  echo "✅ rootfs.cpio built in pass 1 ($(du -h "$CPIO" | cut -f1))"
+  exit 0
+fi
+
+if [ $PASS1_EXIT -ne 0 ]; then
+  echo "⚠️  Pass 1 exited with $PASS1_EXIT (expected: makedevs fails on CI)"
+fi
+
+# 重新 stub — host-makedevs 包覆盖了我们的 exit 0 stub
+printf '#!/bin/sh\nexit 0\n' > "$FB/makedevs"
+chmod +x "$FB/makedevs"
+echo "✅ makedevs re-stubbed after host-makedevs package build"
+
+echo "═══ buildroot pass 2 (filesystem) ═══"
+timeout 600 make CONF="$CONF" buildroot 2>&1 || { echo "❌ FATAL: buildroot failed (exit=$?)"; exit 1; }
 
 CPIO="output/$CONF/little/buildroot-ext/images/rootfs.cpio"
 [ -f "$CPIO" ] && [ -s "$CPIO" ] || { echo "❌ FATAL: rootfs.cpio missing/empty"; exit 1; }
