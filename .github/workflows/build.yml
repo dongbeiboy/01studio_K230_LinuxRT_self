@@ -590,12 +590,6 @@ jobs:
           # CDK sharefs 是用户态可执行程序，经 artifact zip 传输丢 +x → rcS Permission denied
           chmod +x "${LINUX_BUILD_DIR}/rootfs/sbin/sharefs" 2>/dev/null || true
           chmod +x "${LINUX_BUILD_DIR}/rootfs/mnt/sharefs" 2>/dev/null || true
-          # ⚠️ buildroot 多架构 symlink：upload-artifact zip 传输会把 symlink 展开成空目录/丢失，
-          #    导致 loader 搜 /usr/lib64xthead/lp64d/ 失败 → dbus/openssl 等库加载失败（实机实测）
-          ln -sfn ../lib "${LINUX_BUILD_DIR}/rootfs/lib64xthead/lp64d"
-          ln -sfn ../lib "${LINUX_BUILD_DIR}/rootfs/usr/lib64xthead/lp64d"
-          echo "✅ lib64xthead/lp64d symlinks restored:"
-          ls -la "${LINUX_BUILD_DIR}/rootfs/lib64xthead/" "${LINUX_BUILD_DIR}/rootfs/usr/lib64xthead/" 2>/dev/null || true
           # CI 无 loop 设备，用 mtools 替代 mount 填充 vfat
           sed -i 's/^\([[:space:]]*\)mount -t vfat -o loop app.vfat.*/\1[ -z "$(ls big-core\/app\/ 2>\/dev\/null)" ] || mcopy -s -i app.vfat big-core\/app\/* ::\/ 2>\/dev\/null || true # CI mtools/' board/common/gen_image_script/gen_image_comm_func.sh
           sed -i '/^[[:space:]]*cp -a big-core\/app\/\* \$VMT/d' board/common/gen_image_script/gen_image_comm_func.sh
