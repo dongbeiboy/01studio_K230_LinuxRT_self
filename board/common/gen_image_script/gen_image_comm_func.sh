@@ -85,10 +85,13 @@ copye_file_to_images()
 		fakeroot -- cp -rf ${BUILD_DIR}/images/little-core/ko-apps/* ${BUILD_DIR}/images/little-core/rootfs/
 		# ⚠️ 恢复 buildroot 多架构 symlink：ko-apps(linux rootfs) 的 lib64xthead 可能覆盖 buildroot 的
 		#    lib64xthead/lp64d -> ../lib 链接（CI 的 linux rootfs 含该目录，本地不含 → 行为不一致）。
-		#    链接丢失后 loader 搜 /usr/lib64xthead/lp64d/ 失败 → dbus/openssl 加载失败（实机实测）。
-		#    ln -sfn 幂等：无论目标当前是链接/目录/不存在，都重建为指向 ../lib 的链接。
-		ln -sfn ../lib ${BUILD_DIR}/images/little-core/rootfs/lib64xthead/lp64d 2>/dev/null || { mkdir -p ${BUILD_DIR}/images/little-core/rootfs/lib64xthead; ln -sfn ../lib ${BUILD_DIR}/images/little-core/rootfs/lib64xthead/lp64d; }
-		ln -sfn ../lib ${BUILD_DIR}/images/little-core/rootfs/usr/lib64xthead/lp64d 2>/dev/null || { mkdir -p ${BUILD_DIR}/images/little-core/rootfs/usr/lib64xthead; ln -sfn ../lib ${BUILD_DIR}/images/little-core/rootfs/usr/lib64xthead/lp64d; }
+		#    链接丢失后 loader 搜 /lib64xthead/lp64d/ /usr/lib64xthead/lp64d/ 失败 → dbus/openssl 加载失败（实机实测）。
+		#    注意: 覆盖后 lp64d 可能是"目录"，ln -sfn 不能替换目录 → 必须先 rm -rf 再建链接。
+		for _l in lib64xthead/lp64d usr/lib64xthead/lp64d; do
+			rm -rf ${BUILD_DIR}/images/little-core/rootfs/${_l}
+			mkdir -p ${BUILD_DIR}/images/little-core/rootfs/$(dirname ${_l})
+			ln -sfn ../lib ${BUILD_DIR}/images/little-core/rootfs/${_l}
+		done
 		echo "✅ lib64xthead/lp64d symlinks restored:"
 		ls -la ${BUILD_DIR}/images/little-core/rootfs/lib64xthead/ ${BUILD_DIR}/images/little-core/rootfs/usr/lib64xthead/ 2>/dev/null || true
 		# 生成 ld.so.cache，解决 /usr/lib 下 D-Bus/OpenSSL 等库找不到的问题
