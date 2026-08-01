@@ -18,8 +18,12 @@ case "$1" in
             done
             echo "Starting SWUpdate OTA server..."
             mkdir -p /var/www/swupdate
+            # -k 必需（签名强制）；mongoose 参数为 -w 后单个字符串，不支持 --listening-address
+            # -p reboot: postupdate 命令，否则网页 Restart 按钮只执行空命令、不会重启
             ${SWUPDATE_BIN} -v \
-                -w "--document-root /var/www/swupdate --port 9090 --listening-address 0.0.0.0" \
+                -k "${OTA_PUBKEY:-/etc/ota_public.pem}" \
+                -p "${OTA_POSTUPDATE:-reboot}" \
+                -w "--document-root /var/www/swupdate --port 9090" \
                 > /var/log/swupdate.log 2>&1 &
         fi
         ;;

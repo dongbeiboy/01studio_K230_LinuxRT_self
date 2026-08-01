@@ -2,6 +2,7 @@
 # ota_ab_upgrade.sh — A/B OTA 升级（目标板执行）
 # 用法: ota_ab_upgrade.sh /path/to/k230_ota_ab_YYYYMMDD.tar.gz
 # 特点: 管道直写不落盘（避免 rootfs 空间不足）
+# 注意: 本文件是 tools/ota_ab_upgrade.sh 的板端部署副本，请保持两处同步
 set -e
 
 error_exit() { echo "OTA FAILED: $1"; exit 1; }

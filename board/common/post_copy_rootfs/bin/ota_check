@@ -1,0 +1,194 @@
+#!/bin/sh
+#
+# ota_check — K230 A/B 分区校验工具（板端）
+#
+# 用法:
+#   ota_check status              槽位/版本/attempt/分区表 摘要
+#   ota_check diff [--full]       对比 A/B 槽内容（默认 rtt+linux；--full 含 rootfs）
+#   ota_check verify [a|b]        用 /etc/ota_manifest 期望哈希校验槽位（默认当前槽）
+#   ota_check fsck [a|b]          rootfs 只读完整性检查（需板端有 e2fsck）
+#   ota_check all                 全量自检（status + fsck + diff）
+#
+# 说明:
+#   - 偏移量来自 board/common/gen_image_cfg/partition_layout.sh（单一真相来源）
+#   - verify 依赖升级成功后写入的 /etc/ota_manifest（见 ota_ab_upgrade.sh）
+#
+
+DEV="${OTA_DEV:-/dev/mmcblk0}"
+MANIFEST="${OTA_MANIFEST:-/etc/ota_manifest}"
+
+# ===== 分区布局（扇区，512B/扇区） =====
+# Slot A: rtt@10M linux@30M rootfs@128M；Slot B: rtt@384M linux@404M rootfs@502M
+# 大小: rtt=20M linux=50M rootfs=256M
+A_RTT_S=20480;     A_LINUX_S=61440;    A_ROOTFS_S=262144
+B_RTT_S=786432;    B_LINUX_S=827392;   B_ROOTFS_S=1028096
+RTT_CNT=$((20*1024*1024/512))     # 40960
+LINUX_CNT=$((50*1024*1024/512))   # 102400
+ROOTFS_CNT=$((256*1024*1024/512)) # 524288
+
+# ===== 工具 =====
+info()  { echo "[ota_check] $*"; }
+die()   { echo "[ota_check] ERROR: $*" >&2; exit 1; }
+
+[ -b "$DEV" ] || die "$DEV not found (is SD card present?)"
+command -v sha256sum >/dev/null || die "sha256sum not available"
+
+# ===== 槽位查询 =====
+cur_slot()
+{
+    local s
+    s=$(fw_printenv -n boot_slot 2>/dev/null || echo "a")
+    case "$s" in a|b) echo "$s";; *) echo "a";; esac
+}
+
+slot_offsets()
+{
+    # 输出: <rtt_sec> <linux_sec> <rootfs_sec> <rootfs_partition>
+    case "$1" in
+        a) echo "$A_RTT_S $A_LINUX_S $A_ROOTFS_S 1" ;;
+        b) echo "$B_RTT_S $B_LINUX_S $B_ROOTFS_S 2" ;;
+        *) die "invalid slot: $1" ;;
+    esac
+}
+
+# 读槽位内一段内容的 sha256：<slot> <what: rtt|linux|rootfs>
+slot_hash()
+{
+    local s="$1" what="$2" off cnt
+    set -- $(slot_offsets "$s")
+    case "$what" in
+        rtt)    off=$1; cnt=$RTT_CNT ;;
+        linux)  off=$2; cnt=$LINUX_CNT ;;
+        rootfs) off=$3; cnt=$ROOTFS_CNT ;;
+        *) die "unknown part: $what" ;;
+    esac
+    dd if="$DEV" bs=512 skip=$off count=$cnt 2>/dev/null | sha256sum | awk '{print $1}'
+}
+
+# ===== status =====
+cmd_status()
+{
+    local slot cur_root fs_type
+    slot=$(cur_slot)
+    info "设备: $DEV"
+    echo "  boot_slot            : $slot (cmdline root: $(grep -o 'root=/dev/mmcblk0p[0-9]' /proc/cmdline 2>/dev/null | cut -d= -f2))"
+    echo "  version              : $(cat /etc/version/release_version 2>/dev/null | head -1 || echo '(unknown)')"
+    echo "  boot_slot_a_attempt  : $(fw_printenv -n boot_slot_a_attempt 2>/dev/null || echo '?')"
+    echo "  boot_slot_b_attempt  : $(fw_printenv -n boot_slot_b_attempt 2>/dev/null || echo '?')"
+    echo "  boot_attempt_max     : $(fw_printenv -n boot_attempt_max 2>/dev/null || echo '?')"
+
+    # cmdline root 分区与 boot_slot 一致性
+    cur_root=$(grep -o 'root=/dev/mmcblk0p[0-9]' /proc/cmdline 2>/dev/null | tr -dc '12')
+    if [ -n "$cur_root" ]; then
+        if { [ "$slot" = "a" ] && [ "$cur_root" = "1" ]; } || \
+           { [ "$slot" = "b" ] && [ "$cur_root" = "2" ]; }; then
+            echo "  slot/cmdline 一致性 : OK"
+        else
+            echo "  slot/cmdline 一致性 : MISMATCH (boot_slot=$slot vs root=$cur_root)"
+        fi
+    fi
+
+    # manifest
+    if [ -f "$MANIFEST" ]; then
+        echo "  ota_manifest         : $(grep '^VERSION=' "$MANIFEST" | cut -d= -f2)"
+    else
+        echo "  ota_manifest         : (无，尚未执行过 A/B 升级)"
+    fi
+
+    echo "  分区表:"
+    fdisk -l "$DEV" 2>/dev/null | sed -n '/^Device/,/^$/p' | head -8 | sed 's/^/    /'
+
+    echo "  内容摘要 (A/B 哈希):"
+    echo "    rtt    A=$(slot_hash a rtt | cut -c1-16)  B=$(slot_hash b rtt | cut -c1-16)"
+    echo "    linux  A=$(slot_hash a linux | cut -c1-16)  B=$(slot_hash b linux | cut -c1-16)"
+}
+
+# ===== diff =====
+cmd_diff()
+{
+    local full="$1" ok=1 parts="rtt linux"
+    [ "$full" = "--full" ] && parts="rtt linux rootfs"
+    info "对比 A/B 槽内容: $parts"
+    for p in $parts; do
+        local ha hb
+        ha=$(slot_hash a "$p")
+        hb=$(slot_hash b "$p")
+        if [ "$ha" = "$hb" ]; then
+            echo "  $p : MATCH   ($(echo "$ha" | cut -c1-16)...)"
+        else
+            echo "  $p : DIFFER  (A=$(echo "$ha" | cut -c1-16)... B=$(echo "$hb" | cut -c1-16)...)"
+            ok=0
+        fi
+    done
+    if [ "$ok" = "1" ]; then
+        echo "  结论: A/B 槽内容一致"
+    else
+        echo "  结论: A/B 槽内容不同（正常状态——升级后两槽分别为新旧版本）"
+    fi
+    [ "$ok" = "1" ]
+}
+
+# ===== verify（依赖 manifest） =====
+cmd_verify()
+{
+    local slot="$1" mslot ver
+    [ -f "$MANIFEST" ] || die "no $MANIFEST — 请先执行一次 A/B 升级以生成期望哈希"
+    mslot=$(grep '^SLOT=' "$MANIFEST" | cut -d= -f2)
+    ver=$(grep '^VERSION=' "$MANIFEST" | cut -d= -f2)
+    [ "$mslot" = "$slot" ] || die "manifest 记录的是 slot=$mslot，无法校验 slot=$slot"
+
+    info "校验 slot=$slot（期望版本 $ver，来源 $MANIFEST）"
+    local ok=1
+    for p in rtt linux rootfs; do
+        local exp act
+        exp=$(grep -i "^${p}_SHA256=" "$MANIFEST" | head -1 | cut -d= -f2)
+        act=$(slot_hash "$slot" "$p")
+        if [ "$exp" = "$act" ]; then
+            echo "  $p : OK ($(echo "$act" | cut -c1-16)...)"
+        else
+            echo "  $p : MISMATCH (期望 $(echo "$exp" | cut -c1-16)... 实际 $(echo "$act" | cut -c1-16)...)"
+            ok=0
+        fi
+    done
+    [ "$ok" = "1" ] || die "slot=$slot 校验失败，分区可能已损坏"
+    echo "  slot=$slot 校验通过"
+}
+
+# ===== fsck =====
+cmd_fsck()
+{
+    local slot="$1" part
+    command -v e2fsck >/dev/null || { echo "[ota_check] 板端无 e2fsck，跳过 fsck（可安装 e2fsprogs 或使用 diff/verify）"; return 1; }
+    set -- $(slot_offsets "$slot")
+    part="$4"
+    info "只读检查 rootfs (/dev/mmcblk0p$part, slot=$slot)"
+    e2fsck -n -f "/dev/mmcblk0p$part" 2>&1 | tail -5
+}
+
+# ===== all =====
+cmd_all()
+{
+    cmd_status
+    echo ""
+    cmd_fsck "$(cur_slot)"
+    echo ""
+    cmd_diff "$1"
+}
+
+# ===== 入口 =====
+case "$1" in
+    status)     cmd_status ;;
+    diff)       shift; cmd_diff "$1" ;;
+    verify)     cmd_verify "${2:-$(cur_slot)}" ;;
+    fsck)       cmd_fsck "${2:-$(cur_slot)}" ;;
+    all)        shift; cmd_all "$1" ;;
+    *)
+        echo "用法: ota_check {status|diff [--full]|verify [a|b]|fsck [a|b]|all}"
+        echo "  status     槽位/版本/attempt/分区表/内容摘要"
+        echo "  diff       对比 A/B 槽内容是否一致 (--full 含 rootfs)"
+        echo "  verify     用 /etc/ota_manifest 期望哈希校验槽位"
+        echo "  fsck       rootfs 只读完整性检查 (需要 e2fsck)"
+        echo "  all        全量自检"
+        exit 1
+        ;;
+esac

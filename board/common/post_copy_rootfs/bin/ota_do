@@ -27,6 +27,8 @@ usage()
     echo "  ota_do usb                Auto-detect .swu on USB drive"
     echo "  ota_do web                Start web OTA server (port ${WEB_PORT})"
     echo "  ota_do web-stop           Stop web OTA server"
+    echo "  ota_do ab <file>          A/B slot upgrade (k230_ota_ab_*.tar.gz)"
+    echo "  ota_do check [args]       Partition check: status|diff|verify|fsck|all"
     echo "  ota_do status             Show OTA status"
     exit 1
 }
@@ -39,7 +41,8 @@ do_update()
         return 1
     fi
     echo "Installing update: $file ..."
-    ${SWUPDATE_BIN} -v -i "$file"
+    # -k 必需: 板端 swupdate 启用签名强制（CONFIG_SIGNED_IMAGES），无公钥直接退出
+    ${SWUPDATE_BIN} -v -k "${OTA_PUBKEY:-/etc/ota_public.pem}" -i "$file"
     local ret=$?
     if [ $ret -eq 0 ]; then
         echo "Update successful! Rebooting..."
@@ -131,16 +134,41 @@ case "$1" in
         pidof swupdate > /dev/null && { echo "SWUpdate web already running"; exit 0; }
         echo "Starting SWUpdate web server on port ${WEB_PORT}..."
         mkdir -p "$WEB_DOCROOT"
+        # -k 必需（签名强制）；mongoose 参数必须是 -w 后的单个字符串，
+        # swupdate 2020.04 的 mongoose 不支持 --listening-address（默认监听所有接口）
+        # -p reboot: postupdate 命令，否则网页 Restart 按钮只执行空命令、不会重启
         ${SWUPDATE_BIN} -v \
-            -w "--document-root ${WEB_DOCROOT} --port ${WEB_PORT} --listening-address 0.0.0.0" \
+            -k "${OTA_PUBKEY:-/etc/ota_public.pem}" \
+            -p "${OTA_POSTUPDATE:-reboot}" \
+            -w "--document-root ${WEB_DOCROOT} --port ${WEB_PORT}" \
             > "$SWUPDATE_WEB_LOG" 2>&1 &
         echo "Web OTA server started (PID: $!)"
-        echo "Access: http://$(ip route get 1 2>/dev/null | awk '{print $7; exit}')/${WEB_PORT}"
+        echo "Access: http://$(ip route get 1 2>/dev/null | awk '{print $7; exit}'):${WEB_PORT}"
         ;;
     web-stop)
         echo "Stopping SWUpdate web server..."
         killall swupdate 2>/dev/null
         echo "Done."
+        ;;
+    ab)
+        # A/B 槽位升级（k230_ota_ab_*.tar.gz，交替写入非当前槽）
+        [ -z "$2" ] && usage
+        if [ -x /bin/ota_ab_upgrade.sh ]; then
+            /bin/ota_ab_upgrade.sh "$2"
+        else
+            echo "ERROR: /bin/ota_ab_upgrade.sh not installed on this system"
+            exit 1
+        fi
+        ;;
+    check)
+        # 分区校验（转发到 ota_check）
+        shift
+        if [ -x /bin/ota_check ]; then
+            /bin/ota_check "$@"
+        else
+            echo "ERROR: /bin/ota_check not installed on this system"
+            exit 1
+        fi
         ;;
     status)
         if pidof swupdate > /dev/null; then
@@ -151,6 +179,13 @@ case "$1" in
         echo ""
         echo "Interface status:"
         ip addr show 2>/dev/null | grep -E "inet " | awk '{print "  "$2"  ("$NF")"}'
+        echo ""
+        echo "=== Partition status ==="
+        if [ -x /bin/ota_check ]; then
+            /bin/ota_check status
+        else
+            echo "  (ota_check not installed)"
+        fi
         ;;
     *)
         usage

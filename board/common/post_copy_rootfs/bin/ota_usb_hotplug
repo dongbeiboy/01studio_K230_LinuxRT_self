@@ -22,7 +22,7 @@ for dev in /dev/sd[a-z]1 /dev/sd[a-z]2; do
                 if [ -f "$swu" ]; then
                     logger -t ota-usb "Found $swu on USB, starting update..."
                     umount "$mp"
-                    /usr/bin/swupdate -v -i "$swu" && reboot
+                    /usr/bin/swupdate -v -k "${OTA_PUBKEY:-/etc/ota_public.pem}" -i "$swu" && reboot
                     exit 0
                 fi
             done
