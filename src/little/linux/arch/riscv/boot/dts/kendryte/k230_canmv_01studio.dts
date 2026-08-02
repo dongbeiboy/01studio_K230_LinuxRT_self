@@ -26,6 +26,23 @@
 		linux,initrd-end = <0x0 0x0>;
 		stdout-path = "serial0:115200";
 	};
+
+	/* LCD panel power rails (hard-wired always-on on 01Studio board) */
+	lcd_vcc: lcd-vcc {
+		compatible = "regulator-fixed";
+		regulator-name = "lcd_vcc";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
+	lcd_iovcc: lcd-iovcc {
+		compatible = "regulator-fixed";
+		regulator-name = "lcd_iovcc";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+	};
 };
 &ddr {
 	reg = <0x0 0x30200000 0x0 0xfe00000>;  /*linux memory config*/
@@ -89,14 +106,18 @@
 
 &dsi {
     status = "okay";
+    clocks = <&disp_cfgclk>;
+    clock-names = "pclk";
 
     panel@0 {
         compatible = "sitronix,st7701-800x480";
         reg = <0>;
         reset-gpios = <&port24 0 GPIO_ACTIVE_HIGH>;
         backlight-gpios = <&port25 0 GPIO_ACTIVE_HIGH>;
-        panel-width-mm = <108>;
-        panel-height-mm = <65>;
+        VCC-supply = <&lcd_vcc>;
+        IOVCC-supply = <&lcd_iovcc>;
+        panel-width-mm = <77>;
+        panel-height-mm = <46>;
 
         display-timings {
             timing-0 {
